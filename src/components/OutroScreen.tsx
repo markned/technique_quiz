@@ -1,10 +1,17 @@
 import { OUTRO_VIDEO_PATH } from "../helpers/quizConfig";
+import { boostVolume } from "../lib/volumeBoost";
 
 type OutroScreenProps = {
   onRestart: () => void;
 };
 
 export function OutroScreen({ onRestart }: OutroScreenProps) {
+  const onPlay = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = e.currentTarget;
+    video.muted = false;
+    boostVolume(video);
+  };
+
   return (
     <main className="app-shell outro-video-shell">
       <video
@@ -14,7 +21,7 @@ export function OutroScreen({ onRestart }: OutroScreenProps) {
         playsInline
         muted
         loop
-        onPlay={(e) => { (e.target as HTMLVideoElement).muted = false; }}
+        onPlay={onPlay}
       />
       <button className="outro-restart-btn" onClick={onRestart} title="Перезапустить">
         ↻

@@ -117,54 +117,6 @@ body,
   animation: shake 0.6s ease-in-out infinite;
 }
 
-.rules-btn {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 10px 20px;
-  font-size: 0.95rem;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 12px;
-  color: #fff;
-  cursor: pointer;
-}
-
-.rules-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: rgba(0, 0, 0, 0.7);
-  display: grid;
-  place-items: center;
-  padding: 20px;
-}
-
-.rules-dialog {
-  max-width: 480px;
-  max-height: 85vh;
-  overflow-y: auto;
-  background: #10192c;
-  border: 1px solid rgba(158, 180, 227, 0.32);
-  border-radius: 20px;
-  padding: 24px;
-}
-
-.rules-dialog h3 {
-  margin: 0 0 16px;
-  font-size: 1.3rem;
-}
-
-.rules-text {
-  margin: 0 0 20px;
-  font-family: inherit;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  color: #bbcaea;
-}
-
 @keyframes shake {
   0%, 100% { transform: rotate(-2deg) translateY(0); }
   25% { transform: rotate(2deg) translateY(-4px); }

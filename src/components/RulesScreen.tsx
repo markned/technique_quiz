@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useTripleTap } from "../hooks/useTripleTap";
 import { GAME_RULES } from "../content/rules";
 import { RULES_AUDIO_DELAY_MS, RULES_AUDIO_PATH } from "../helpers/quizConfig";
+import { boostVolume } from "../lib/volumeBoost";
 
 type RulesScreenProps = {
   onComplete: () => void;
@@ -15,6 +16,7 @@ export function RulesScreen({ onComplete }: RulesScreenProps) {
     const t = setTimeout(() => {
       const audio = new Audio(RULES_AUDIO_PATH);
       audioRef.current = audio;
+      boostVolume(audio);
       audio.play().catch(() => {});
       audio.addEventListener("ended", onComplete);
     }, RULES_AUDIO_DELAY_MS);
