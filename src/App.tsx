@@ -11,6 +11,7 @@ import { TransitionOverlay } from "./components/TransitionOverlay";
 import { pickLyricLines } from "./helpers/lyrics";
 import { getYouTubeEmbedUrl, reorderNoConsecutiveSameTitle, shuffle, toLocalMediaUrl } from "./helpers/media";
 import {
+  assetUrl,
   getGuessSeconds,
   ROUND_DELAY_MS,
   SPECIAL_BG_BY_TITLE,
@@ -65,7 +66,7 @@ export default function App() {
   const roundYoutubeBackgroundEmbed = specialRoundBg
     ? getYouTubeEmbedUrl(specialRoundBg.url, specialRoundBg.start, { muted: true, controls: false, loop: true })
     : null;
-  const roundPhotoBackground = round ? `/content/photos/${randomPhotoSequence[roundIndex]}.jpg` : null;
+  const roundPhotoBackground = round ? assetUrl(`/content/photos/${randomPhotoSequence[roundIndex]}.jpg`) : null;
 
   const hintLines = useMemo(
     () => (round ? pickLyricLines(round.lyrics, round.hintLineIds) : []),

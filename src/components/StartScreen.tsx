@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { GAME_RULES } from "../content/rules";
+import { assetUrl } from "../helpers/quizConfig";
 
 type StartScreenProps = {
   onStart: () => void;
@@ -12,7 +13,7 @@ export function StartScreen({ onStart }: StartScreenProps) {
     <>
       <div className="start-screen start-screen-icon" onClick={onStart}>
         <img
-          src="/content/photos/start-icon.png"
+          src={assetUrl("/content/photos/start-icon.png")}
           alt="Начать"
           className="start-icon"
         />

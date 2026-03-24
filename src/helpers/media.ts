@@ -1,5 +1,5 @@
 import type { Round } from "../types";
-import { LOCAL_FILE_BY_TITLE } from "./quizConfig";
+import { LOCAL_FILE_BY_TITLE, assetUrl } from "./quizConfig";
 
 export const shuffle = <T,>(items: T[]): T[] => {
   const copy = [...items];
@@ -28,7 +28,7 @@ export const reorderNoConsecutiveSameTitle = <T extends { title: string }>(round
 export const toLocalMediaUrl = (round: Round): string => {
   const canonical = LOCAL_FILE_BY_TITLE[round.title];
   if (canonical) {
-    return `/content/audio/${encodeURIComponent(canonical)}`;
+    return assetUrl(`/content/audio/${encodeURIComponent(canonical)}`);
   }
   if (round.url.startsWith("/")) {
     return round.url;
@@ -37,7 +37,7 @@ export const toLocalMediaUrl = (round: Round): string => {
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/g, "-")
     .replaceAll(/^-+|-+$/g, "");
-  return `/content/audio/${slug || round.id}.mp3`;
+  return assetUrl(`/content/audio/${slug || round.id}.mp3`);
 };
 
 export const getYouTubeEmbedUrl = (
