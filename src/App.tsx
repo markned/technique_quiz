@@ -4,6 +4,7 @@ import { LocalMediaPlayer } from "./adapters/localMediaPlayer";
 import type { PlayerAdapter } from "./adapters/player";
 import { IntroScreen } from "./components/IntroScreen";
 import { OutroScreen } from "./components/OutroScreen";
+import { GamePauseToggle } from "./components/GamePauseToggle";
 import { QuizBackground } from "./components/QuizBackground";
 import { QuizScreen } from "./components/QuizScreen";
 import { RestartConfirmDialog } from "./components/RestartConfirmDialog";
@@ -40,11 +41,11 @@ export default function App() {
   const [roundState, setRoundState] = useState<RoundState>("intro");
   const [roundIndex, setRoundIndex] = useState(0);
   const [timerSeconds, setTimerSeconds] = useState(60);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [showRestartConfirm, setShowRestartConfirm] = useState(false);
   const [isStartCinematic, setIsStartCinematic] = useState(false);
   const [upcomingRoundTitle, setUpcomingRoundTitle] = useState<string>("");
   const [visibleHintLineCount, setVisibleHintLineCount] = useState(0);
+  const [gamePaused, setGamePaused] = useState(false);
 
   const playerRef = useRef<PlayerAdapter | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -52,6 +53,10 @@ export default function App() {
   const fadeCancelRef = useRef<(() => void) | null>(null);
   const pausedAtRef = useRef<number>(0);
   const hiddenRevealTapRef = useRef<{ count: number; lastTapMs: number }>({ count: 0, lastTapMs: 0 });
+  const roundStateRef = useRef<RoundState>(roundState);
+  const timerSecondsRef = useRef(timerSeconds);
+  roundStateRef.current = roundState;
+  timerSecondsRef.current = timerSeconds;
 
   const orderedRounds = useMemo(
     () =>
@@ -126,6 +131,26 @@ export default function App() {
     return playerRef.current;
   };
 
+  const startGuessCountdown = (guessSec: number) => {
+    let lastTickSegment = -1;
+    countdownCancelRef.current = createAccurateCountdown(
+      guessSec,
+      (remaining) => {
+        const elapsed = guessSec - remaining;
+        const segment = Math.floor(elapsed / 4);
+        if (segment !== lastTickSegment && segment >= 0) {
+          lastTickSegment = segment;
+          playTimerTickSound();
+        }
+        setTimerSeconds(remaining);
+      },
+      () => {
+        playTimerEndSound();
+        setRoundState("timer_finished");
+      },
+    );
+  };
+
   const startPlaybackMonitorForRound = (
     activeRound: (typeof orderedRounds)[number],
     hintLineCount: number,
@@ -143,7 +168,6 @@ export default function App() {
         setVisibleHintLineCount(hintLineCount);
         player.pause();
         pausedAtRef.current = time;
-        setIsPlaying(false);
         const guessSec = getGuessSeconds(activeRound.revealLineIds.length);
         if (preserveGuessTimer) {
           setTimerSoundsDucked(false);
@@ -152,24 +176,7 @@ export default function App() {
         }
         setRoundState("paused_for_guess");
         setTimerSeconds(guessSec);
-
-        let lastTickSegment = -1;
-        countdownCancelRef.current = createAccurateCountdown(
-          guessSec,
-          (remaining) => {
-            const elapsed = guessSec - remaining;
-            const segment = Math.floor(elapsed / 4);
-            if (segment !== lastTickSegment && segment >= 0) {
-              lastTickSegment = segment;
-              playTimerTickSound();
-            }
-            setTimerSeconds(remaining);
-          },
-          () => {
-            playTimerEndSound();
-            setRoundState("timer_finished");
-          },
-        );
+        startGuessCountdown(guessSec);
         return;
       }
 
@@ -194,6 +201,7 @@ export default function App() {
     }
     const hints = pickLyricLines(r.lyrics, r.hintLineIds);
     stopPlaybackTimersAndFade();
+    setGamePaused(false);
     setTimerSeconds(getGuessSeconds(r.revealLineIds.length));
     setVisibleHintLineCount(0);
     setRoundState("playing");
@@ -205,7 +213,6 @@ export default function App() {
     player.seekTo(preRollStartSec);
     player.setVolume(0);
     player.play();
-    setIsPlaying(true);
     if (fadeInMs <= 0) {
       player.setVolume(1);
     } else {
@@ -231,35 +238,52 @@ export default function App() {
     setRoundIndex(0);
   };
 
-  const playPause = () => {
-    if (roundState !== "playing" && roundState !== "reveal") {
+  const toggleGamePause = () => {
+    if (roundStateRef.current === "transition") {
       return;
     }
-    const player = ensurePlayer();
-    if (isPlaying) {
+
+    if (!gamePaused) {
       stopFade();
-      player.pause();
-      setIsPlaying(false);
+      ensurePlayer().pause();
       stopPlaybackMonitor();
+      countdownCancelRef.current?.();
+      countdownCancelRef.current = null;
+      setTimerSoundsDucked(false);
+      stopAllTimerCountSounds();
+      setGamePaused(true);
       return;
     }
-    unmutePlayer(player);
-    player.play();
-    setIsPlaying(true);
-    if (roundState === "playing") {
-      startPlaybackMonitor();
+
+    setGamePaused(false);
+    const r = orderedRoundsRef.current[roundIndexRef.current];
+    if (!r) {
+      return;
+    }
+    const hints = pickLyricLines(r.lyrics, r.hintLineIds);
+    const rs = roundStateRef.current;
+    const player = ensurePlayer();
+
+    if (rs === "playing") {
+      unmutePlayer(player);
+      player.play();
+      startPlaybackMonitorForRound(r, hints.length, false);
+    } else if (rs === "reveal") {
+      unmutePlayer(player);
+      player.play();
+    } else if (rs === "paused_for_guess") {
+      startGuessCountdown(timerSecondsRef.current);
     }
   };
 
   const replaySnippet = () => {
-    if (!round) {
+    if (gamePaused || !round) {
       return;
     }
     const player = ensurePlayer();
     unmutePlayer(player);
     player.seekTo(round.start);
     player.play();
-    setIsPlaying(true);
     if (roundState === "reveal") {
       return;
     }
@@ -285,10 +309,12 @@ export default function App() {
     player.seekTo(pausedAtRef.current);
     player.play();
     setRoundState("reveal");
-    setIsPlaying(true);
   };
 
   const forceReveal = () => {
+    if (gamePaused) {
+      return;
+    }
     if (roundState === "reveal" || roundState === "transition" || roundState === "finished") {
       return;
     }
@@ -301,11 +327,13 @@ export default function App() {
     player.seekTo(answerStart);
     player.play();
     setRoundState("reveal");
-    setIsPlaying(true);
     setVisibleHintLineCount(hintLines.length);
   };
 
   const handleRevealClick = () => {
+    if (gamePaused) {
+      return;
+    }
     const now = performance.now();
     const isFastTap = now - hiddenRevealTapRef.current.lastTapMs < 1200;
     const nextCount = isFastTap ? hiddenRevealTapRef.current.count + 1 : 1;
@@ -321,6 +349,7 @@ export default function App() {
   };
 
   const beginRoundTransition = () => {
+    setGamePaused(false);
     const list = orderedRoundsRef.current;
     const nextIdx = roundIndexRef.current + 1;
     setUpcomingRoundTitle(transitionOverlayTitle(nextIdx, list));
@@ -332,7 +361,6 @@ export default function App() {
     fadeCancelRef.current = fadeOutVolume(player.setVolume.bind(player), TRANSITION_FADE_MS, () => {
       player.pause();
       player.setVolume(1);
-      setIsPlaying(false);
       const current = roundIndexRef.current;
       const next = current + 1;
       const roundsList = orderedRoundsRef.current;
@@ -362,18 +390,19 @@ export default function App() {
   };
 
   const nextRound = () => {
-    if (roundState === "reveal") {
-      beginRoundTransition();
+    if (gamePaused || roundState !== "reveal") {
+      return;
     }
+    beginRoundTransition();
   };
 
   const restartQuiz = () => {
     stopPlaybackTimersAndFade();
+    setGamePaused(false);
     playerRef.current?.pause();
     playerRef.current?.setVolume(1);
     setRoundIndex(0);
     setTimerSeconds(60);
-    setIsPlaying(false);
     setIsStartCinematic(false);
     setRoundState("intro");
   };
@@ -404,6 +433,11 @@ export default function App() {
   return (
     <main className="app-shell app-shell-quiz">
       <QuizBackground photoUrl={roundPhotoBackground} youtubeSrc={roundYoutubeBackgroundEmbed} />
+      <GamePauseToggle
+        paused={gamePaused}
+        disabled={roundState === "transition"}
+        onToggle={toggleGamePause}
+      />
       <div className="app-overlay" key={roundIndex}>
         <QuizScreen
           round={round}
@@ -415,8 +449,6 @@ export default function App() {
           visibleHintLineCount={visibleHintLineCount}
           timerSeconds={timerSeconds}
           totalSeconds={getGuessSeconds(revealLines.length)}
-          isPlaying={isPlaying}
-          onPlayPause={playPause}
           onReplaySnippet={replaySnippet}
           onReveal={handleRevealClick}
           onNextRound={nextRound}

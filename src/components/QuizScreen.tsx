@@ -14,8 +14,6 @@ type QuizScreenProps = {
   visibleHintLineCount: number;
   timerSeconds: number;
   totalSeconds: number;
-  isPlaying: boolean;
-  onPlayPause: () => void;
   onReplaySnippet: () => void;
   onReveal: () => void;
   onNextRound: () => void;
@@ -33,8 +31,6 @@ export function QuizScreen(props: QuizScreenProps) {
     visibleHintLineCount,
     timerSeconds,
     totalSeconds,
-    isPlaying,
-    onPlayPause,
     onReplaySnippet,
     onReveal,
     onNextRound,
@@ -66,8 +62,6 @@ export function QuizScreen(props: QuizScreenProps) {
       </div>
       <Controls
         roundState={roundState}
-        isPlaying={isPlaying}
-        onPlayPause={onPlayPause}
         onReplaySnippet={onReplaySnippet}
         onReveal={onReveal}
         onNextRound={onNextRound}

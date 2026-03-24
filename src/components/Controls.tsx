@@ -4,8 +4,6 @@ import type { RoundState } from "../types";
 
 type ControlsProps = {
   roundState: RoundState;
-  isPlaying: boolean;
-  onPlayPause: () => void;
   onReplaySnippet: () => void;
   onReveal: () => void;
   onNextRound: () => void;
@@ -14,8 +12,6 @@ type ControlsProps = {
 
 export function Controls({
   roundState,
-  isPlaying,
-  onPlayPause,
   onReplaySnippet,
   onReveal,
   onNextRound,
@@ -26,16 +22,19 @@ export function Controls({
 
   const canReveal = roundState === "timer_finished";
   const canNext = roundState === "reveal";
-  const canPlayPause = roundState === "playing" || roundState === "reveal";
+  const canReplay = roundState !== "transition";
 
   return (
     <div className="dock-host">
       <nav ref={dockRef} className="dock" role="toolbar">
-      <button className="dock-btn" onClick={onPlayPause} disabled={!canPlayPause} title={isPlaying ? "Пауза" : "Пуск"}>
-        {isPlaying ? "⏸" : "▶"}
-      </button>
-      <button className="dock-btn" onClick={onReplaySnippet} title="Повторить">
-        ↻
+      <button
+        type="button"
+        className="dock-btn"
+        onClick={onReplaySnippet}
+        disabled={!canReplay}
+        title="Повторить фрагмент"
+      >
+        ▶
       </button>
       <button
         className={`dock-btn dock-btn-primary ${canReveal ? "" : "dock-btn-dimmed"}`}
