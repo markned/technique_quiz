@@ -5,6 +5,7 @@ import type { PlayerAdapter } from "./adapters/player";
 import { IntroScreen } from "./components/IntroScreen";
 import { OutroScreen } from "./components/OutroScreen";
 import { RulesScreen } from "./components/RulesScreen";
+import { QuizBackground } from "./components/QuizBackground";
 import { QuizScreen } from "./components/QuizScreen";
 import { StartScreen } from "./components/StartScreen";
 import { TransitionOverlay } from "./components/TransitionOverlay";
@@ -18,7 +19,12 @@ import {
   STOP_SAFETY_MARGIN_SEC,
   TRANSITION_FADE_MS,
 } from "./helpers/quizConfig";
-import { playTimerEndSound, playTimerTickSound } from "./lib/timerSounds";
+import {
+  playTimerEndSound,
+  playTimerTickSound,
+  setTimerSoundsDucked,
+  stopAllTimerCountSounds,
+} from "./lib/timerSounds";
 import { createAccurateCountdown, fadeOutVolume } from "./helpers/timing";
 import type { RoundState } from "./types";
 
@@ -87,6 +93,8 @@ export default function App() {
   const stopCountdown = () => {
     countdownCancelRef.current?.();
     countdownCancelRef.current = null;
+    setTimerSoundsDucked(false);
+    stopAllTimerCountSounds();
   };
 
   const stopFade = () => {
@@ -125,19 +133,21 @@ export default function App() {
         setIsPlaying(false);
         const guessSec = getGuessSeconds(activeRound.revealLineIds.length);
         if (preserveGuessTimer) {
+          setTimerSoundsDucked(false);
           setRoundState((prev) => (prev === "timer_finished" ? "timer_finished" : "paused_for_guess"));
           return;
         }
         setRoundState("paused_for_guess");
         setTimerSeconds(guessSec);
 
-        let lastTickQuarter = Math.floor(guessSec / 4);
+        let lastTickSegment = -1;
         countdownCancelRef.current = createAccurateCountdown(
           guessSec,
           (remaining) => {
-            const q = Math.floor(remaining / 4);
-            if (q !== lastTickQuarter && q > 0) {
-              lastTickQuarter = q;
+            const elapsed = guessSec - remaining;
+            const segment = Math.floor(elapsed / 4);
+            if (segment !== lastTickSegment && segment >= 0) {
+              lastTickSegment = segment;
               playTimerTickSound();
             }
             setTimerSeconds(remaining);
@@ -234,6 +244,9 @@ export default function App() {
       return;
     }
     if (roundState === "paused_for_guess" || roundState === "timer_finished") {
+      if (roundState === "paused_for_guess" && countdownCancelRef.current) {
+        setTimerSoundsDucked(true);
+      }
       startPlaybackMonitor(true);
       return;
     }
@@ -292,6 +305,8 @@ export default function App() {
     const list = orderedRoundsRef.current;
     if (next < list.length) {
       setUpcomingRoundTitle(list[next].title);
+    } else {
+      setUpcomingRoundTitle("Спасибо!");
     }
     const player = ensurePlayer();
     setRoundState("transition");
@@ -352,9 +367,7 @@ export default function App() {
 
   if (roundState === "intro") {
     if (isStartCinematic) {
-      return (
-        <IntroScreen onVideoEnded={onIntroVideoEnded} onSkip={skipIntroAndGoToRules} />
-      );
+      return <IntroScreen onVideoEnded={onIntroVideoEnded} onSkip={skipIntroAndGoToRules} />;
     }
     return (
       <main className="app-shell">
@@ -376,20 +389,8 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
-      {roundYoutubeBackgroundEmbed ? (
-        <iframe
-          key={`${round.id}-youtube-bg`}
-          className="youtube-bg"
-          src={roundYoutubeBackgroundEmbed}
-          title="Фоновое видео YouTube"
-          allow="autoplay; encrypted-media; picture-in-picture"
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
-      ) : null}
-      {!roundYoutubeBackgroundEmbed && roundPhotoBackground ? (
-        <div className="photo-bg" style={{ backgroundImage: `url("${roundPhotoBackground}")` }} />
-      ) : null}
+    <main className="app-shell app-shell-quiz">
+      <QuizBackground photoUrl={roundPhotoBackground} youtubeSrc={roundYoutubeBackgroundEmbed} />
       <div className="app-overlay" key={roundIndex}>
         <QuizScreen
           round={round}
@@ -425,7 +426,7 @@ export default function App() {
                   restartQuiz();
                 }}
               >
-                Перезапустить
+                Заново
               </button>
             </div>
           </div>

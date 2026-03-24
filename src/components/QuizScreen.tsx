@@ -43,17 +43,26 @@ export function QuizScreen(props: QuizScreenProps) {
 
   const revealVisible = roundState === "reveal";
   const timerActive = roundState === "paused_for_guess";
+  const showLyrics = roundState !== "transition";
 
   return (
     <div className="quiz-screen">
-      <div className="timer-with-counter">
-        <Timer seconds={timerSeconds} isActive={timerActive} totalSeconds={totalSeconds} />
-        <span className="quiz-round-counter">{roundIndex + 1}/{totalRounds}</span>
-      </div>
+      <header className="quiz-header">
+        <span className="quiz-round-counter">
+          {roundIndex + 1}/{totalRounds}
+        </span>
+        <div className="quiz-header-timer">
+          <Timer seconds={timerSeconds} isActive={timerActive} totalSeconds={totalSeconds} />
+        </div>
+      </header>
       <div className="quiz-content">
-        <h2 className="quiz-title">{round.title}</h2>
-        <LyricsPanel hintLines={hintLines} visibleCount={visibleHintLineCount} />
-        <RevealPanel revealLines={revealLines} visible={revealVisible} />
+        {showLyrics ? (
+          <>
+            <h2 className="quiz-title">{round.title}</h2>
+            <LyricsPanel hintLines={hintLines} visibleCount={visibleHintLineCount} />
+            <RevealPanel revealLines={revealLines} visible={revealVisible} />
+          </>
+        ) : null}
       </div>
       <Controls
         roundState={roundState}

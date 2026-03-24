@@ -19,6 +19,8 @@ export const getGuessSeconds = (revealLineCount: number): number =>
 
 export const STOP_SAFETY_MARGIN_SEC = 0.02;
 export const TRANSITION_FADE_MS = 2000;
+/** Плавная смена фото / YouTube-фона между раундами (мс) */
+export const BACKGROUND_CROSSFADE_MS = 1400;
 /** Задержка между видео/раундами и стартом следующего фрагмента (мс) */
 export const ROUND_DELAY_MS = 2000;
 export const INTRO_VIDEO_SECONDS = 15;
@@ -26,7 +28,7 @@ export const INTRO_VIDEO_SECONDS = 15;
 export const TIMER_COUNT_SOUND = assetUrl("/content/audio/timercount.mp3");
 export const TIMER_END_SOUND = assetUrl("/content/audio/timerend.mp3");
 export const RULES_AUDIO_PATH = assetUrl("/content/audio/rules.mp3");
-export const RULES_AUDIO_DELAY_MS = 3000;
+export const RULES_AUDIO_DELAY_MS = 2000;
 export const INTRO_VIDEO_PATH = assetUrl("/content/video/intro.mp4");
 export const OUTRO_VIDEO_PATH = assetUrl("/content/video/outro.mp4");
 

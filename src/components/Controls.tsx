@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { useDockFitScale } from "../hooks/useDockFitScale";
 import type { RoundState } from "../types";
 
 type ControlsProps = {
@@ -19,12 +21,16 @@ export function Controls({
   onNextRound,
   onRestartRequest,
 }: ControlsProps) {
+  const dockRef = useRef<HTMLElement>(null);
+  useDockFitScale(dockRef);
+
   const canReveal = roundState === "timer_finished";
   const canNext = roundState === "reveal";
   const canPlayPause = roundState === "playing" || roundState === "reveal";
 
   return (
-    <nav className="dock" role="toolbar">
+    <div className="dock-host">
+      <nav ref={dockRef} className="dock" role="toolbar">
       <button className="dock-btn" onClick={onPlayPause} disabled={!canPlayPause} title={isPlaying ? "Пауза" : "Пуск"}>
         {isPlaying ? "⏸" : "▶"}
       </button>
@@ -50,5 +56,6 @@ export function Controls({
         ↻
       </button>
     </nav>
+    </div>
   );
 }

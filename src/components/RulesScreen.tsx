@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
+import { useFitTextToHeight } from "../hooks/useFitTextToHeight";
 import { useTripleTap } from "../hooks/useTripleTap";
 import { GAME_RULES } from "../content/rules";
 import { RULES_AUDIO_DELAY_MS, RULES_AUDIO_PATH } from "../helpers/quizConfig";
-import { boostVolume } from "../lib/volumeBoost";
+import { boostRulesNarration } from "../lib/volumeBoost";
 
 type RulesScreenProps = {
   onComplete: () => void;
@@ -11,12 +12,13 @@ type RulesScreenProps = {
 export function RulesScreen({ onComplete }: RulesScreenProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const handleTripleTap = useTripleTap(onComplete);
+  const { containerRef, textRef } = useFitTextToHeight({ maxPx: 44, floorMinPx: 8 });
 
   useEffect(() => {
     const t = setTimeout(() => {
       const audio = new Audio(RULES_AUDIO_PATH);
       audioRef.current = audio;
-      boostVolume(audio);
+      boostRulesNarration(audio);
       audio.play().catch(() => {});
       audio.addEventListener("ended", onComplete);
     }, RULES_AUDIO_DELAY_MS);
@@ -36,7 +38,11 @@ export function RulesScreen({ onComplete }: RulesScreenProps) {
     >
       <div className="rules-screen-card">
         <h2 className="rules-screen-title">Правила игры</h2>
-        <pre className="rules-screen-text">{GAME_RULES}</pre>
+        <div ref={containerRef} className="rules-screen-body">
+          <pre ref={textRef} className="rules-screen-text">
+            {GAME_RULES}
+          </pre>
+        </div>
         <p className="rules-screen-hint">Тройной тап — пропустить</p>
       </div>
     </main>
