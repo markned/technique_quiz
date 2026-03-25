@@ -17,7 +17,6 @@ type QuizScreenProps = {
   onReplaySnippet: () => void;
   onReveal: () => void;
   onNextRound: () => void;
-  onRestartRequest: () => void;
 };
 
 export function QuizScreen(props: QuizScreenProps) {
@@ -34,7 +33,6 @@ export function QuizScreen(props: QuizScreenProps) {
     onReplaySnippet,
     onReveal,
     onNextRound,
-    onRestartRequest,
   } = props;
 
   const revealVisible = roundState === "reveal";
@@ -65,7 +63,6 @@ export function QuizScreen(props: QuizScreenProps) {
         onReplaySnippet={onReplaySnippet}
         onReveal={onReveal}
         onNextRound={onNextRound}
-        onRestartRequest={onRestartRequest}
       />
     </div>
   );

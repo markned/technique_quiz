@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useFitTextToHeight } from "../hooks/useFitTextToHeight";
-import { useTripleTap } from "../hooks/useTripleTap";
 import { GAME_RULES } from "../content/rules";
 import { RULES_AUDIO_DELAY_MS, RULES_AUDIO_PATH } from "../helpers/quizConfig";
+import { whenAudioUnlocked } from "../lib/audioUnlock";
 import { boostRulesNarration } from "../lib/volumeBoost";
 
 type RulesScreenProps = {
@@ -11,31 +11,44 @@ type RulesScreenProps = {
 
 export function RulesScreen({ onComplete }: RulesScreenProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const handleTripleTap = useTripleTap(onComplete);
   const { containerRef, textRef } = useFitTextToHeight({ maxPx: 44, floorMinPx: 8 });
 
   useEffect(() => {
-    const t = setTimeout(() => {
+    let cancelled = false;
+    let cancelPendingPlay: (() => void) | undefined;
+
+    const startPlayback = () => {
+      if (cancelled) return;
       const audio = new Audio(RULES_AUDIO_PATH);
       audioRef.current = audio;
       boostRulesNarration(audio);
-      audio.play().catch(() => {});
-      audio.addEventListener("ended", onComplete);
+      const tryPlay = () => {
+        void audio.play().catch(() => {
+          if (cancelled) return;
+          cancelPendingPlay?.();
+          cancelPendingPlay = whenAudioUnlocked(() => {
+            if (cancelled) return;
+            void audio.play().catch(() => {});
+          });
+        });
+      };
+      tryPlay();
+    };
+
+    const t = window.setTimeout(() => {
+      if (!cancelled) startPlayback();
     }, RULES_AUDIO_DELAY_MS);
+
     return () => {
-      clearTimeout(t);
+      cancelled = true;
+      window.clearTimeout(t);
+      cancelPendingPlay?.();
       audioRef.current?.pause();
     };
-  }, [onComplete]);
+  }, []);
 
   return (
-    <main
-      className="app-shell rules-screen-shell"
-      onClick={handleTripleTap}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onComplete()}
-    >
+    <main className="app-shell rules-screen-shell">
       <div className="rules-screen-card">
         <h2 className="rules-screen-title">Правила игры</h2>
         <div ref={containerRef} className="rules-screen-body">
@@ -43,7 +56,16 @@ export function RulesScreen({ onComplete }: RulesScreenProps) {
             {GAME_RULES}
           </pre>
         </div>
-        <p className="rules-screen-hint">Тройной тап — пропустить</p>
+        <div className="rules-screen-start-wrap">
+          <button
+            type="button"
+            className="rules-screen-start-btn"
+            onClick={onComplete}
+            aria-label="Начать викторину"
+          >
+            →
+          </button>
+        </div>
       </div>
     </main>
   );

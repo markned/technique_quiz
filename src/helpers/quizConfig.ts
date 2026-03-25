@@ -1,5 +1,5 @@
 /** Базовый URL для статики (на GitHub Pages: /technique_quiz/) */
-const BASE = import.meta.env.BASE_URL ?? "/";
+const BASE = `${(import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/")}`;
 
 /** Путь к файлу с учётом base (работает на GitHub Pages) */
 export const assetUrl = (path: string) =>

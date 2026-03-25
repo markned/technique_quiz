@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { ReplayWithPlayIcon } from "./ReplayWithPlayIcon";
 import { useDockFitScale } from "../hooks/useDockFitScale";
 import type { RoundState } from "../types";
 
@@ -7,7 +8,6 @@ type ControlsProps = {
   onReplaySnippet: () => void;
   onReveal: () => void;
   onNextRound: () => void;
-  onRestartRequest: () => void;
 };
 
 export function Controls({
@@ -15,7 +15,6 @@ export function Controls({
   onReplaySnippet,
   onReveal,
   onNextRound,
-  onRestartRequest,
 }: ControlsProps) {
   const dockRef = useRef<HTMLElement>(null);
   useDockFitScale(dockRef);
@@ -29,17 +28,17 @@ export function Controls({
       <nav ref={dockRef} className="dock" role="toolbar">
       <button
         type="button"
-        className="dock-btn"
+        className="dock-btn dock-btn-replay"
         onClick={onReplaySnippet}
         disabled={!canReplay}
-        title="Повторить фрагмент"
+        title="Повторить фрагмент (R)"
       >
-        ▶
+        <ReplayWithPlayIcon />
       </button>
       <button
         className={`dock-btn dock-btn-primary ${canReveal ? "" : "dock-btn-dimmed"}`}
         onClick={onReveal}
-        title={canReveal ? "Открыть ответ" : "Тройной клик — выскрыть ответ"}
+        title={canReveal ? "Открыть ответ (пробел)" : "Тройной клик или пробел — вскрыть ответ"}
       >
         👁
       </button>
@@ -47,12 +46,9 @@ export function Controls({
         className={`dock-btn dock-btn-primary ${canNext ? "" : "dock-btn-dimmed"}`}
         onClick={onNextRound}
         disabled={!canNext}
-        title="Следующий раунд"
+        title="Следующий раунд (→)"
       >
         →
-      </button>
-      <button className="dock-btn dock-btn-danger" onClick={onRestartRequest} title="Перезапуск">
-        ↻
       </button>
     </nav>
     </div>

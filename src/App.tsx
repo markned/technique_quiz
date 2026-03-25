@@ -5,6 +5,8 @@ import type { PlayerAdapter } from "./adapters/player";
 import { IntroScreen } from "./components/IntroScreen";
 import { OutroScreen } from "./components/OutroScreen";
 import { GamePauseToggle } from "./components/GamePauseToggle";
+import { useCoarsePointer } from "./hooks/useCoarsePointer";
+import { useGesturePauseLayout } from "./hooks/useGesturePauseLayout";
 import { QuizBackground } from "./components/QuizBackground";
 import { QuizScreen } from "./components/QuizScreen";
 import { RestartConfirmDialog } from "./components/RestartConfirmDialog";
@@ -12,7 +14,8 @@ import { RulesScreen } from "./components/RulesScreen";
 import { StartScreen } from "./components/StartScreen";
 import { TransitionOverlay } from "./components/TransitionOverlay";
 import { pickLyricLines } from "./helpers/lyrics";
-import { getYouTubeEmbedUrl, reorderNoConsecutiveSameTitle, shuffle, toLocalMediaUrl } from "./helpers/media";
+import { getYouTubeEmbedUrl, shuffle, toLocalMediaUrl } from "./helpers/media";
+import { shuffleWithinDifficultyBuckets } from "./helpers/quizOrder";
 import {
   assetUrl,
   getGuessSeconds,
@@ -46,6 +49,8 @@ export default function App() {
   const [upcomingRoundTitle, setUpcomingRoundTitle] = useState<string>("");
   const [visibleHintLineCount, setVisibleHintLineCount] = useState(0);
   const [gamePaused, setGamePaused] = useState(false);
+  const isCoarsePointer = useCoarsePointer();
+  const gesturePauseLayout = useGesturePauseLayout();
 
   const playerRef = useRef<PlayerAdapter | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -55,22 +60,16 @@ export default function App() {
   const hiddenRevealTapRef = useRef<{ count: number; lastTapMs: number }>({ count: 0, lastTapMs: 0 });
   const roundStateRef = useRef<RoundState>(roundState);
   const timerSecondsRef = useRef(timerSeconds);
+  const gamePausedRef = useRef(false);
+  const replaySnippetRef = useRef<() => void>(() => {});
+  const nextRoundRef = useRef<() => void>(() => {});
+  const handleRevealClickRef = useRef<() => void>(() => {});
   roundStateRef.current = roundState;
   timerSecondsRef.current = timerSeconds;
+  gamePausedRef.current = gamePaused;
 
-  const orderedRounds = useMemo(
-    () =>
-      reorderNoConsecutiveSameTitle(
-        [...rounds].sort((a, b) => {
-          const byRevealLength = a.revealLineIds.length - b.revealLineIds.length;
-          if (byRevealLength !== 0) {
-            return byRevealLength;
-          }
-          return a.id - b.id;
-        }),
-      ),
-    [],
-  );
+  const [playOrder, setPlayOrder] = useState(() => shuffleWithinDifficultyBuckets([...rounds]));
+  const orderedRounds = playOrder;
   const orderedRoundsRef = useRef(orderedRounds);
   orderedRoundsRef.current = orderedRounds;
   const roundIndexRef = useRef(0);
@@ -238,6 +237,8 @@ export default function App() {
     setRoundIndex(0);
   };
 
+  const toggleGamePauseRef = useRef<() => void>(() => {});
+
   const toggleGamePause = () => {
     if (roundStateRef.current === "transition") {
       return;
@@ -275,6 +276,34 @@ export default function App() {
       startGuessCountdown(timerSecondsRef.current);
     }
   };
+
+  toggleGamePauseRef.current = toggleGamePause;
+
+  const isQuizMainView =
+    !!round &&
+    (roundState === "playing" ||
+      roundState === "paused_for_guess" ||
+      roundState === "timer_finished" ||
+      roundState === "reveal" ||
+      roundState === "transition");
+
+  useEffect(() => {
+    if (!isCoarsePointer || !isQuizMainView) {
+      return;
+    }
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 2) {
+        return;
+      }
+      if (roundStateRef.current === "transition") {
+        return;
+      }
+      e.preventDefault();
+      toggleGamePauseRef.current();
+    };
+    window.addEventListener("touchstart", onTouchStart, { capture: true, passive: false });
+    return () => window.removeEventListener("touchstart", onTouchStart, true);
+  }, [isCoarsePointer, isQuizMainView]);
 
   const replaySnippet = () => {
     if (gamePaused || !round) {
@@ -396,15 +425,100 @@ export default function App() {
     beginRoundTransition();
   };
 
+  replaySnippetRef.current = replaySnippet;
+  nextRoundRef.current = nextRound;
+  handleRevealClickRef.current = handleRevealClick;
+
+  useEffect(() => {
+    if (!isQuizMainView) {
+      return;
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (showRestartConfirm) {
+        return;
+      }
+      const el = e.target as HTMLElement | null;
+      if (el?.closest?.("input, textarea, select, [contenteditable]")) {
+        return;
+      }
+
+      const rs = roundStateRef.current;
+      if (rs === "transition") {
+        if (e.code === "Space") {
+          e.preventDefault();
+        }
+        return;
+      }
+
+      if (e.code === "Escape") {
+        e.preventDefault();
+        toggleGamePauseRef.current();
+        return;
+      }
+
+      if (e.code === "KeyR" && !e.repeat) {
+        e.preventDefault();
+        replaySnippetRef.current();
+        return;
+      }
+
+      if (e.code === "ArrowRight" && !e.repeat) {
+        if (gamePausedRef.current) {
+          return;
+        }
+        if (rs !== "reveal") {
+          return;
+        }
+        e.preventDefault();
+        nextRoundRef.current();
+        return;
+      }
+
+      if (e.code === "Space" || e.key === " ") {
+        if (gamePausedRef.current) {
+          return;
+        }
+        if (rs === "reveal") {
+          e.preventDefault();
+          return;
+        }
+        e.preventDefault();
+        handleRevealClickRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isQuizMainView, showRestartConfirm]);
+
+  const exitToStartScreen = () => {
+    stopPlaybackTimersAndFade();
+    setGamePaused(false);
+    setShowRestartConfirm(false);
+    playerRef.current?.pause();
+    playerRef.current?.setVolume(1);
+    setRoundIndex(0);
+    setTimerSeconds(60);
+    setVisibleHintLineCount(0);
+    hiddenRevealTapRef.current = { count: 0, lastTapMs: 0 };
+    setIsStartCinematic(false);
+    setRoundState("intro");
+  };
+
   const restartQuiz = () => {
     stopPlaybackTimersAndFade();
     setGamePaused(false);
     playerRef.current?.pause();
     playerRef.current?.setVolume(1);
+    const newOrder = shuffleWithinDifficultyBuckets([...rounds]);
+    setPlayOrder(newOrder);
     setRoundIndex(0);
-    setTimerSeconds(60);
+    setVisibleHintLineCount(0);
+    hiddenRevealTapRef.current = { count: 0, lastTapMs: 0 };
+    setTimerSeconds(getGuessSeconds(newOrder[0]?.revealLineIds.length ?? 1));
     setIsStartCinematic(false);
-    setRoundState("intro");
+    setUpcomingRoundTitle(transitionOverlayTitle(0, newOrder));
+    setRoundState("transition");
+    setTimeout(() => void loadRoundAtIndex(0), ROUND_DELAY_MS);
   };
 
   if (roundState === "intro") {
@@ -437,6 +551,9 @@ export default function App() {
         paused={gamePaused}
         disabled={roundState === "transition"}
         onToggle={toggleGamePause}
+        touchMode={gesturePauseLayout}
+        onRestartRequest={() => setShowRestartConfirm(true)}
+        onExitToStart={exitToStartScreen}
       />
       <div className="app-overlay" key={roundIndex}>
         <QuizScreen
@@ -452,7 +569,6 @@ export default function App() {
           onReplaySnippet={replaySnippet}
           onReveal={handleRevealClick}
           onNextRound={nextRound}
-          onRestartRequest={() => setShowRestartConfirm(true)}
         />
       </div>
       <RestartConfirmDialog

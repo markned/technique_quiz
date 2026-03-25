@@ -149,19 +149,127 @@ body,
   margin: 0 auto;
 }
 
-.game-pause-scrim {
+/* Один слой: затемнение + иконка поверх */
+.game-pause-layer {
   position: fixed;
   inset: 0;
-  z-index: 35;
-  background: rgba(0, 0, 0, 0.28);
+  z-index: 44;
   pointer-events: auto;
+  isolation: isolate;
+}
+
+.game-pause-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.game-pause-icon-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Как .start-screen-icon: иконка по центру экрана по вертикали и горизонтали */
+.game-pause-start-icon-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.game-pause-menu {
+  position: absolute;
+  left: max(16px, var(--safe-left));
+  right: max(16px, var(--safe-right));
+  bottom: max(20px, var(--safe-bottom));
+  max-width: 320px;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.game-pause-menu-btn {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 16px;
+  padding: 16px 20px;
+  min-height: 56px;
+  font-size: clamp(1rem, 2.2vw, 1.15rem);
+  font-weight: 700;
+  font-family: inherit;
+  color: #fff;
+  cursor: pointer;
+  touch-action: manipulation;
+  background: linear-gradient(135deg, #bc3350, #8b2439);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s, filter 0.12s;
+}
+
+.game-pause-menu-btn:hover {
+  filter: brightness(1.06);
+}
+
+.game-pause-menu-btn:active {
+  transform: scale(0.98);
+}
+
+.game-pause-menu-btn--secondary {
+  background: rgba(18, 26, 43, 0.95);
+  border: 1px solid rgba(128, 151, 196, 0.35);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.game-pause-menu-btn--secondary:hover {
+  filter: brightness(1.08);
+}
+
+.dock-replay-with-play {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.dock-replay-with-play__replay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.dock-replay-with-play__play {
+  position: relative;
+  z-index: 1;
+  width: 63%;
+  height: 63%;
+}
+
+.dock-btn-replay {
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .game-pause-toggle {
   position: fixed;
   top: calc(10px + var(--safe-top));
   right: calc(10px + var(--safe-right));
-  z-index: 45;
+  z-index: 46;
   width: 38px;
   height: 38px;
   margin: 0;
@@ -254,6 +362,26 @@ body,
   cursor: pointer;
 }
 
+.intro-skip-hint {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, var(--safe-bottom));
+  transform: translateX(-50%);
+  z-index: 3;
+  margin: 0;
+  max-width: min(100% - 32px, 360px);
+  padding: 0 12px;
+  box-sizing: border-box;
+  font-size: clamp(0.75rem, 2.2vw, 0.88rem);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(248, 251, 255, 0.82);
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 0 20px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  user-select: none;
+}
+
 .rules-screen-shell {
   position: fixed;
   inset: 0;
@@ -266,7 +394,6 @@ body,
   align-items: center;
   justify-content: center;
   background: #0a0d14;
-  cursor: pointer;
   padding: max(8px, var(--safe-top)) max(12px, var(--safe-right)) max(8px, var(--safe-bottom))
     max(12px, var(--safe-left));
   overflow: hidden;
@@ -317,13 +444,39 @@ body,
   min-height: 0;
 }
 
-.rules-screen-hint {
-  margin: 0;
+.rules-screen-start-wrap {
   flex-shrink: 0;
-  margin-top: auto;
-  padding-top: clamp(8px, 2vmin, 14px);
-  font-size: clamp(0.8rem, 2.35vmin, 0.95rem);
-  color: rgba(255, 255, 255, 0.55);
+  display: flex;
+  justify-content: flex-end;
+  padding-top: clamp(10px, 2vmin, 18px);
+}
+
+.rules-screen-start-btn {
+  width: 54px;
+  height: 54px;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #fff;
+  font-size: 1.45rem;
+  line-height: 1;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  transition: transform 0.15s, filter 0.15s;
+}
+
+.rules-screen-start-btn:hover {
+  filter: brightness(1.06);
+}
+
+.rules-screen-start-btn:active {
+  transform: scale(0.94);
 }
 
 .outro-video-shell {

@@ -1,4 +1,5 @@
 import { TIMER_COUNT_SOUND, TIMER_END_SOUND } from "../helpers/quizConfig";
+import { whenAudioUnlocked } from "./audioUnlock";
 
 const TICK_BASE_VOL = 0.5;
 const END_BASE_VOL = 0.8;
@@ -30,7 +31,10 @@ export function playTimerEndSound(): void {
   stopAllTimerCountSounds();
   const a = new Audio(TIMER_END_SOUND);
   a.volume = timerSoundsDucked ? 0 : END_BASE_VOL;
-  void a.play();
+  void a.play().catch(() => {
+    if (timerSoundsDucked) return;
+    whenAudioUnlocked(() => void a.play().catch(() => {}));
+  });
 }
 
 export function playTimerTickSound(): void {
@@ -47,6 +51,18 @@ export function playTimerTickSound(): void {
   };
   a.addEventListener("ended", onDone);
   void a.play().catch(() => {
-    activeTickAudios.delete(a);
+    if (timerSoundsDucked) {
+      activeTickAudios.delete(a);
+      return;
+    }
+    whenAudioUnlocked(() => {
+      if (timerSoundsDucked) {
+        activeTickAudios.delete(a);
+        return;
+      }
+      void a.play().catch(() => {
+        activeTickAudios.delete(a);
+      });
+    });
   });
 }

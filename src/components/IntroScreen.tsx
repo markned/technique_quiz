@@ -27,6 +27,7 @@ export function IntroScreen({ onVideoEnded, onSkip }: IntroScreenProps) {
         onPlay={onPlay}
         onEnded={onVideoEnded}
       />
+      <p className="intro-skip-hint">Тройной тап — пропустить</p>
     </main>
   );
 }
