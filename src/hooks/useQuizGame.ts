@@ -6,11 +6,10 @@ import { useCoarsePointer } from "./useCoarsePointer";
 import { useGesturePauseLayout } from "./useGesturePauseLayout";
 import { pickLyricLines } from "../helpers/lyrics";
 import { getYouTubeEmbedUrl, toLocalMediaUrl } from "../helpers/media";
-import { shuffleWithinDifficultyBuckets } from "../helpers/quizOrder";
+import { buildSessionPlayOrder } from "../helpers/quizOrder";
 import { buildBackgroundPhotoSequence } from "../helpers/backgroundPhotos";
 import {
   assetUrl,
-  DEFAULT_QUIZ_SESSION_LENGTH,
   getGuessSeconds,
   ROUND_DELAY_MS,
   STOP_SAFETY_MARGIN_SEC,
@@ -31,35 +30,64 @@ import {
 } from "../lib/timerSounds";
 import type { Round, RoundState } from "../types";
 import {
-  PREVIEW_ROUND_SESSION_KEY,
+  clearPreviewRoundStorage,
   editorHref,
+  isPreviewQueryActive,
+  loadPreviewRoundFromStorageAsync,
   parsePreviewRoundFromSession,
+  stripPreviewQueryFromUrl,
 } from "../editor/previewRoundStorage";
 
 const createPlayer = (): PlayerAdapter => new LocalMediaPlayer();
 
-function buildSessionPlayOrder(): Round[] {
-  const visible = allRounds.filter((r) => !r.hidden);
-  return shuffleWithinDifficultyBuckets([...visible]).slice(0, DEFAULT_QUIZ_SESSION_LENGTH);
+function visibleRoundsForSession(): Round[] {
+  return allRounds.filter((r) => !r.hidden);
 }
 
-function useInitialPreviewRound(): Round | null {
-  const [previewRound] = useState<Round | null>(() => parsePreviewRoundFromSession());
+function tryParseInlinePreviewRound(): Round | null {
+  return parsePreviewRoundFromSession();
+}
+
+function useInitialPreviewRound(): { previewRound: Round | null; previewLoading: boolean } {
+  const [previewRound, setPreviewRound] = useState<Round | null>(() => tryParseInlinePreviewRound());
+  const [previewLoading, setPreviewLoading] = useState(
+    () => isPreviewQueryActive() && tryParseInlinePreviewRound() === null,
+  );
+
   useEffect(() => {
+    if (!previewLoading) return;
+    let cancelled = false;
+    void loadPreviewRoundFromStorageAsync().then((r) => {
+      if (cancelled) return;
+      clearPreviewRoundStorage();
+      stripPreviewQueryFromUrl();
+      setPreviewRound(r);
+      setPreviewLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewLoading]);
+
+  useEffect(() => {
+    if (previewLoading) return;
     if (!previewRound) return;
-    sessionStorage.removeItem(PREVIEW_ROUND_SESSION_KEY);
-    const path = window.location.pathname + window.location.hash;
-    window.history.replaceState({}, "", path);
-  }, [previewRound]);
-  return previewRound;
+    if (!isPreviewQueryActive()) return;
+    clearPreviewRoundStorage();
+    stripPreviewQueryFromUrl();
+  }, [previewLoading, previewRound]);
+
+  return { previewRound, previewLoading };
 }
 
 export function useQuizGame() {
-  const previewRound = useInitialPreviewRound();
+  const { previewRound, previewLoading } = useInitialPreviewRound();
   const isPreviewModeRef = useRef(!!previewRound);
   isPreviewModeRef.current = !!previewRound;
 
-  const [roundState, setRoundState] = useState<RoundState>(() => (previewRound ? "transition" : "intro"));
+  const [roundState, setRoundState] = useState<RoundState>(() =>
+    tryParseInlinePreviewRound() ? "transition" : "intro",
+  );
   const [roundIndex, setRoundIndex] = useState(0);
   const [timerSeconds, setTimerSeconds] = useState(() =>
     previewRound ? getGuessSeconds(previewRound.revealLineIds.length) : 60,
@@ -80,19 +108,46 @@ export function useQuizGame() {
   const fadeCancelRef = useRef<(() => void) | null>(null);
   const pausedAtRef = useRef<number>(0);
   const hiddenRevealTapRef = useRef<{ count: number; lastTapMs: number }>({ count: 0, lastTapMs: 0 });
+  const resetHiddenRevealTap = () => {
+    hiddenRevealTapRef.current = { count: 0, lastTapMs: 0 };
+  };
   const roundStateRef = useRef<RoundState>(roundState);
   const timerSecondsRef = useRef(timerSeconds);
   const gamePausedRef = useRef(false);
   const replaySnippetRef = useRef<() => void>(() => {});
   const nextRoundRef = useRef<() => void>(() => {});
   const handleRevealClickRef = useRef<() => void>(() => {});
+  /** После перехода из редактора `?preview=1` — новая страница без жеста; Safari блокирует звук до первого касания. */
+  const previewInitialGestureDoneRef = useRef(false);
   roundStateRef.current = roundState;
   timerSecondsRef.current = timerSeconds;
   gamePausedRef.current = gamePaused;
 
-  const [playOrder, setPlayOrder] = useState(() =>
-    previewRound ? [previewRound] : buildSessionPlayOrder(),
-  );
+  const [playOrder, setPlayOrder] = useState<Round[]>(() => {
+    const inline = tryParseInlinePreviewRound();
+    if (inline) return [inline];
+    if (isPreviewQueryActive()) return [];
+    return buildSessionPlayOrder(visibleRoundsForSession());
+  });
+
+  useEffect(() => {
+    if (previewLoading) return;
+    if (previewRound) {
+      setPlayOrder([previewRound]);
+      return;
+    }
+    setPlayOrder((prev) =>
+      prev.length === 0 ? buildSessionPlayOrder(visibleRoundsForSession()) : prev,
+    );
+  }, [previewLoading, previewRound]);
+
+  useEffect(() => {
+    if (previewLoading) return;
+    if (!previewRound) return;
+    setRoundState("transition");
+    setTimerSeconds(getGuessSeconds(previewRound.revealLineIds.length));
+    setUpcomingRoundTitle(transitionOverlayTitle(0, [previewRound]));
+  }, [previewLoading, previewRound]);
   const orderedRounds = playOrder;
   const orderedRoundsRef = useRef(orderedRounds);
   orderedRoundsRef.current = orderedRounds;
@@ -153,6 +208,7 @@ export function useQuizGame() {
 
   const unmutePlayer = (player: PlayerAdapter) => {
     stopFade();
+    player.setMuted(false);
     player.setVolume(1);
   };
 
@@ -242,10 +298,23 @@ export function useQuizGame() {
     await player.load(toLocalMediaUrl(r));
     const { preRollStartSec, fadeInMs } = preRollSeekAndFadeInMs(r.start, TRANSITION_FADE_MS);
 
-    player.seekTo(preRollStartSec);
+    await player.seekToAsync(preRollStartSec);
     player.setVolume(0);
-    player.play();
+    // Safari: первый play с muted=true иногда не крутит таймлайн до пользовательского жеста; «Повтор» уже идёт
+    // с unmutePlayer + play(). Сначала пробуем «тихий» неслышимый вывод (volume 0, без muted), иначе — классический muted.
+    player.setMuted(false);
+    try {
+      await player.playAsync();
+    } catch {
+      try {
+        player.setMuted(true);
+        await player.playAsync();
+      } catch {
+        void player.play();
+      }
+    }
     if (fadeInMs <= 0) {
+      player.setMuted(false);
       player.setVolume(1);
     } else {
       fadeCancelRef.current = fadeInVolume(player.setVolume.bind(player), fadeInMs, () => {
@@ -256,10 +325,41 @@ export function useQuizGame() {
   };
 
   useEffect(() => {
-    if (!previewRound) return;
-    const t = window.setTimeout(() => void loadRoundAtIndex(0), ROUND_DELAY_MS);
-    return () => window.clearTimeout(t);
-  }, [previewRound]);
+    if (!previewRound) {
+      previewInitialGestureDoneRef.current = false;
+      return;
+    }
+    if (orderedRounds.length === 0) return;
+    if (previewInitialGestureDoneRef.current) return;
+
+    let timeoutId: number | null = null;
+
+    const detach = () => {
+      window.removeEventListener("pointerdown", onFirstGesture, { capture: true });
+      window.removeEventListener("keydown", onFirstKey, { capture: true });
+    };
+
+    const startAfterDelay = () => {
+      if (previewInitialGestureDoneRef.current) return;
+      previewInitialGestureDoneRef.current = true;
+      detach();
+      timeoutId = window.setTimeout(() => void loadRoundAtIndex(0), ROUND_DELAY_MS);
+    };
+
+    const onFirstGesture = () => startAfterDelay();
+    const onFirstKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.repeat) return;
+      startAfterDelay();
+    };
+
+    window.addEventListener("pointerdown", onFirstGesture, { passive: true, capture: true });
+    window.addEventListener("keydown", onFirstKey, { capture: true });
+    return () => {
+      detach();
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    };
+  }, [previewRound, orderedRounds.length]);
 
   useEffect(() => {
     return () => {
@@ -407,7 +507,7 @@ export function useQuizGame() {
     const nextCount = isFastTap ? hiddenRevealTapRef.current.count + 1 : 1;
     hiddenRevealTapRef.current = { count: nextCount, lastTapMs: now };
     if (nextCount >= 3) {
-      hiddenRevealTapRef.current = { count: 0, lastTapMs: 0 };
+      resetHiddenRevealTap();
       forceReveal();
       return;
     }
@@ -555,7 +655,7 @@ export function useQuizGame() {
     setRoundIndex(0);
     setTimerSeconds(60);
     setVisibleHintLineCount(0);
-    hiddenRevealTapRef.current = { count: 0, lastTapMs: 0 };
+    resetHiddenRevealTap();
     setIsStartCinematic(false);
     setRoundState("intro");
   };
@@ -569,7 +669,7 @@ export function useQuizGame() {
       playerRef.current?.setVolume(1);
       setRoundIndex(0);
       setVisibleHintLineCount(0);
-      hiddenRevealTapRef.current = { count: 0, lastTapMs: 0 };
+      resetHiddenRevealTap();
       setTimerSeconds(getGuessSeconds(previewRound.revealLineIds.length));
       setIsStartCinematic(false);
       setUpcomingRoundTitle(transitionOverlayTitle(0, [previewRound]));
@@ -582,11 +682,11 @@ export function useQuizGame() {
     setShowRulesOverlay(false);
     playerRef.current?.pause();
     playerRef.current?.setVolume(1);
-    const newOrder = buildSessionPlayOrder();
+    const newOrder = buildSessionPlayOrder(visibleRoundsForSession());
     setPlayOrder(newOrder);
     setRoundIndex(0);
     setVisibleHintLineCount(0);
-    hiddenRevealTapRef.current = { count: 0, lastTapMs: 0 };
+    resetHiddenRevealTap();
     setTimerSeconds(getGuessSeconds(newOrder[0]?.revealLineIds.length ?? 1));
     setIsStartCinematic(false);
     setUpcomingRoundTitle(transitionOverlayTitle(0, newOrder));
@@ -626,5 +726,6 @@ export function useQuizGame() {
     exitToStartScreen,
     restartQuiz,
     previewMode: !!previewRound,
+    previewLoading,
   };
 }

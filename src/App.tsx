@@ -15,6 +15,14 @@ import { useQuizGame } from "./hooks/useQuizGame";
 export default function App() {
   const game = useQuizGame();
 
+  if (game.previewLoading) {
+    return (
+      <main className="app-shell app-shell-start">
+        <p className="app-preview-loading">Загрузка предпросмотра…</p>
+      </main>
+    );
+  }
+
   if (game.roundState === "intro") {
     if (game.isStartCinematic) {
       return <IntroScreen onVideoEnded={game.onIntroVideoEnded} onSkip={game.skipIntroAndGoToRules} />;
@@ -31,19 +39,7 @@ export default function App() {
   }
 
   if (game.roundState === "finished") {
-    return (
-      <>
-        <OutroScreen onRestart={game.restartQuiz} onExitToStart={() => game.setShowExitConfirm(true)} />
-        <ExitConfirmDialog
-          open={game.showExitConfirm}
-          onCancel={() => game.setShowExitConfirm(false)}
-          onConfirm={() => {
-            game.setShowExitConfirm(false);
-            game.exitToStartScreen();
-          }}
-        />
-      </>
-    );
+    return <OutroScreen onRestart={game.restartQuiz} onExitToStart={game.exitToStartScreen} />;
   }
 
   if (!game.round) {
@@ -54,7 +50,10 @@ export default function App() {
     <main className="app-shell app-shell-quiz">
       {game.previewMode && (
         <div className="preview-mode-banner" role="status">
-          Предпросмотр одного раунда — выход в меню ведёт в редактор
+          Предпросмотр одного раунда — выход в меню ведёт в редактор.
+          {game.roundState === "transition" ? (
+            <span className="preview-mode-banner-hint"> Коснитесь экрана или нажмите клавишу, чтобы начать (нужно для звука в Safari).</span>
+          ) : null}
         </div>
       )}
       <QuizBackground photoUrl={game.roundPhotoBackground} youtubeSrc={game.roundYoutubeBackgroundEmbed} />

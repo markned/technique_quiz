@@ -15,15 +15,6 @@ export function OutroScreen({ onRestart, onExitToStart }: OutroScreenProps) {
 
   return (
     <main className="app-shell outro-video-shell">
-      <button
-        type="button"
-        className="outro-close-btn"
-        onClick={onExitToStart}
-        aria-label="Выйти на главный экран"
-        title="Выйти"
-      >
-        <span aria-hidden>✕</span>
-      </button>
       <video
         className="intro-outro-video intro-outro-foreground"
         src={OUTRO_VIDEO_PATH}
@@ -34,11 +25,17 @@ export function OutroScreen({ onRestart, onExitToStart }: OutroScreenProps) {
         onPlay={onPlay}
       />
       <div className="outro-actions">
-        <button type="button" className="outro-menu-btn" onClick={onExitToStart}>
-          В меню
-        </button>
         <button type="button" className="outro-restart-btn" onClick={onRestart} title="Перезапустить" aria-label="Перезапустить">
           ↻
+        </button>
+        <button
+          type="button"
+          className="outro-menu-btn"
+          onClick={onExitToStart}
+          title="В меню"
+          aria-label="Выйти в меню"
+        >
+          <span aria-hidden>✕</span>
         </button>
       </div>
     </main>

@@ -393,9 +393,16 @@ export function RoundEditorApp() {
               type="button"
               className="editor-btn editor-btn--accent"
               onClick={() => {
-                stashEditorSnapshotBeforePreview({ rounds, selectedIndex });
-                stashRoundForPreview(round);
-                navigateToQuizPreview();
+                void (async () => {
+                  if (!(await stashRoundForPreview(round))) {
+                    window.alert(
+                      "Не удалось сохранить раунд для предпросмотра (переполнено хранилище браузера). Попробуйте сократить текст раунда или закрыть лишние вкладки с этим сайтом.",
+                    );
+                    return;
+                  }
+                  stashEditorSnapshotBeforePreview({ rounds, selectedIndex });
+                  navigateToQuizPreview();
+                })();
               }}
             >
               Тест раунда

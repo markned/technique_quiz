@@ -1,4 +1,5 @@
 import type { LyricLine, Round, RoundState } from "../types";
+import { roundCounterEasterEggLabel } from "../helpers/roundCounterEasterEgg";
 import { Controls } from "./Controls";
 import { LyricsPanel } from "./LyricsPanel";
 import { RevealPanel } from "./RevealPanel";
@@ -38,12 +39,13 @@ export function QuizScreen(props: QuizScreenProps) {
   const revealVisible = roundState === "reveal";
   const timerActive = roundState === "paused_for_guess";
   const showLyrics = roundState !== "transition";
+  const counterLabel = roundCounterEasterEggLabel(round) ?? `${roundIndex + 1}/${totalRounds}`;
 
   return (
     <div className="quiz-screen">
       <header className="quiz-header">
         <span className="quiz-round-counter">
-          {roundIndex + 1}/{totalRounds}
+          {counterLabel}
         </span>
         <div className="quiz-header-timer">
           <Timer seconds={timerSeconds} isActive={timerActive} totalSeconds={totalSeconds} />

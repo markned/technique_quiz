@@ -62,6 +62,12 @@ body,
   color: #dce6ff;
 }
 
+.preview-mode-banner-hint {
+  display: inline;
+  font-weight: 400;
+  opacity: 0.92;
+}
+
 .quiz-bg-root {
   position: fixed;
   inset: 0;
@@ -595,40 +601,6 @@ body,
   cursor: pointer;
 }
 
-.outro-close-btn {
-  position: fixed;
-  z-index: 12;
-  top: max(14px, var(--safe-top));
-  right: max(14px, var(--safe-right));
-  width: 44px;
-  height: 44px;
-  margin: 0;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(8, 10, 18, 0.72);
-  color: #f8fbff;
-  font-size: 1.25rem;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  touch-action: manipulation;
-  transition: transform 0.12s, filter 0.12s;
-}
-
-.outro-close-btn:hover {
-  filter: brightness(1.08);
-}
-
-.outro-close-btn:active {
-  transform: scale(0.94);
-}
-
 .outro-actions {
   position: fixed;
   z-index: 10;
@@ -644,20 +616,24 @@ body,
 }
 
 .outro-menu-btn {
-  padding: 12px 24px;
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
   margin: 0;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  background: rgba(8, 10, 18, 0.78);
-  color: #f8fbff;
-  font-size: 1rem;
-  font-weight: 600;
+  padding: 0;
+  border-radius: 50%;
+  border: 0;
+  background: linear-gradient(135deg, #bc3350, #8b2439);
+  color: #fff;
+  font-size: 1.65rem;
+  line-height: 1;
+  font-weight: 300;
   font-family: inherit;
-  line-height: 1.2;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 24px rgba(139, 36, 57, 0.45);
   touch-action: manipulation;
   transition: transform 0.12s, filter 0.12s;
 }
@@ -667,7 +643,7 @@ body,
 }
 
 .outro-menu-btn:active {
-  transform: scale(0.96);
+  transform: scale(0.94);
 }
 
 .outro-restart-btn {
@@ -1151,8 +1127,9 @@ body,
   }
 
   .outro-menu-btn {
-    padding: 10px 18px;
-    font-size: 0.95rem;
+    width: 64px;
+    height: 64px;
+    font-size: 1.45rem;
   }
 
   .outro-restart-btn {
