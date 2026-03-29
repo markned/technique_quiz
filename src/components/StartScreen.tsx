@@ -38,10 +38,21 @@ export function StartScreen({ onStart }: StartScreenProps) {
             <img src={assetUrl("/content/icons/instagram.png")} alt="" width={32} height={32} decoding="async" />
           </a>
         </div>
-        <p className="start-screen-disclaimer" role="note">
-          Автор категорически осуждает употребление наркотических и иных опасных веществ. Материал не содержит призыва к
-          употреблению и не является его пропагандой.
-        </p>
+        <div className="start-screen-disclaimer" role="note">
+          <p>
+            Данный материал создан в некоммерческих целях исключительно из любви и уважения к творчеству
+            Паши Техника.
+          </p>
+          <p>
+            Автор категорически осуждает употребление наркотических и иных опасных веществ. Материал не содержит призыва
+            к употреблению и не является его пропагандой. 
+          </p>
+          <p className="start-screen-disclaimer-rip">
+            R.I.P. Legend
+            <br />
+            01.07.84 - 04.04.25
+          </p>
+        </div>
       </div>
     </div>
   );

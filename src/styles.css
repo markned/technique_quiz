@@ -400,6 +400,17 @@ video.youtube-bg.quiz-bg-video {
   color: rgba(248, 251, 255, 0.42);
   text-align: center;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.start-screen-disclaimer p {
+  margin: 0;
+}
+
+.start-screen-disclaimer-rip {
+  color: rgba(248, 251, 255, 0.5);
 }
 
 .start-icon {
