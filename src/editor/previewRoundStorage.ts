@@ -1,4 +1,4 @@
-import type { Round } from "../types";
+import type { GameMode, Round } from "../types";
 import { idbDeletePreviewRound, idbGetPreviewRound, idbPutPreviewRound } from "./previewRoundIdb";
 
 export const PREVIEW_ROUND_SESSION_KEY = "technique_quiz_preview_round";
@@ -158,9 +158,10 @@ export async function stashRoundForPreview(round: Round): Promise<boolean> {
   }
 }
 
-export function navigateToQuizPreview(): void {
+export function navigateToQuizPreview(mode: GameMode): void {
   const u = new URL(import.meta.env.BASE_URL, window.location.origin);
   u.searchParams.set("preview", "1");
+  u.searchParams.set("previewMode", mode);
   window.location.href = u.pathname + u.search + u.hash;
 }
 

@@ -439,11 +439,29 @@ export function RoundEditorApp() {
                     return;
                   }
                   stashEditorSnapshotBeforePreview({ rounds, selectedIndex });
-                  navigateToQuizPreview();
+                  navigateToQuizPreview("freestyle");
                 })();
               }}
             >
-              Тест раунда
+              Тест фристайл
+            </button>
+            <button
+              type="button"
+              className="editor-btn editor-btn--accent"
+              onClick={() => {
+                void (async () => {
+                  if (!(await stashRoundForPreview(round))) {
+                    window.alert(
+                      "Не удалось сохранить раунд для предпросмотра (переполнено хранилище браузера). Попробуйте сократить текст раунда или закрыть лишние вкладки с этим сайтом.",
+                    );
+                    return;
+                  }
+                  stashEditorSnapshotBeforePreview({ rounds, selectedIndex });
+                  navigateToQuizPreview("quiz");
+                })();
+              }}
+            >
+              Тест викторина
             </button>
           </div>
           <div className="editor-toolbar-cluster editor-toolbar-cluster--right">

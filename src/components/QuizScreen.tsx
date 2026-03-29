@@ -1,5 +1,6 @@
 import type { QuizUiVariant } from "../helpers/quizOptions";
 import type { GameMode, LyricLine, Round, RoundState } from "../types";
+import { useQuizContentFit } from "../hooks/useQuizContentFit";
 import { roundCounterEasterEggLabel } from "../helpers/roundCounterEasterEgg";
 import { Controls } from "./Controls";
 import { LyricsPanel } from "./LyricsPanel";
@@ -72,6 +73,8 @@ export function QuizScreen(props: QuizScreenProps) {
     quizUiVariant === "order" &&
     (roundState === "playing" || roundState === "paused_for_guess");
 
+  const { containerRef: quizFitOuterRef, innerRef: quizFitInnerRef } = useQuizContentFit();
+
   return (
     <div className="quiz-screen">
       <header className="quiz-header">
@@ -88,30 +91,34 @@ export function QuizScreen(props: QuizScreenProps) {
         </div>
       </header>
       <div className="quiz-content">
-        {showLyrics ? (
-          <>
-            <h2 className="quiz-title">{round.title}</h2>
-            <QuizModeHint variant={quizUiVariant} visible={quizHintVisible} />
-            <LyricsPanel hintLines={hintLines} visibleCount={visibleHintLineCount} />
-            <QuizOrderLines
-              roundState={roundState}
-              orderedIds={quizOrderUserIds}
-              lineText={lineText}
-              correctIds={round.revealLineIds}
-              disabled={gamePaused}
-              onReorder={onReorderQuizOrder}
-            />
-            <QuizOptionsGrid
-              options={quizOptions}
-              selectedIndex={selectedQuizIndex}
-              correctIndex={quizCorrectIndex}
-              onSelect={onSelectQuizOption}
-              roundState={roundState}
-              disabled={gamePaused}
-            />
-            <RevealPanel revealLines={revealLines} visible={revealVisible} />
-          </>
-        ) : null}
+        <div ref={quizFitOuterRef} className="quiz-content-fit-outer">
+          <div ref={quizFitInnerRef} className="quiz-content-fit-inner">
+            {showLyrics ? (
+              <>
+                <h2 className="quiz-title">{round.title}</h2>
+                <QuizModeHint variant={quizUiVariant} visible={quizHintVisible} />
+                <LyricsPanel hintLines={hintLines} visibleCount={visibleHintLineCount} />
+                <QuizOrderLines
+                  roundState={roundState}
+                  orderedIds={quizOrderUserIds}
+                  lineText={lineText}
+                  correctIds={round.revealLineIds}
+                  disabled={gamePaused}
+                  onReorder={onReorderQuizOrder}
+                />
+                <QuizOptionsGrid
+                  options={quizOptions}
+                  selectedIndex={selectedQuizIndex}
+                  correctIndex={quizCorrectIndex}
+                  onSelect={onSelectQuizOption}
+                  roundState={roundState}
+                  disabled={gamePaused}
+                />
+                <RevealPanel revealLines={revealLines} visible={revealVisible} />
+              </>
+            ) : null}
+          </div>
+        </div>
       </div>
       <Controls
         roundState={roundState}

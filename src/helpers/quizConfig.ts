@@ -40,8 +40,10 @@ export const TRANSITION_FADE_MS = 2000;
 export const BACKGROUND_CROSSFADE_MS = 1400;
 /** Задержка между видео/раундами и стартом следующего фрагмента (мс) */
 export const ROUND_DELAY_MS = 2000;
-/** Пауза после подсветки верного/неверного ответа в викторине, до продолжения трека (мс). */
+/** Пауза после подсветки верного ответа в викторине, до продолжения трека (мс). */
 export const QUIZ_FEEDBACK_DELAY_MS = 1800;
+/** Пауза после неверного ответа (длиннее, чтобы успела проиграться озвучка). */
+export const QUIZ_FEEDBACK_DELAY_WRONG_MS = 4000;
 export const INTRO_VIDEO_SECONDS = 15;
 
 /** UI: таймер, правила, SFX — `public/content/audio/ui/`, единый формат AAC `.m4a` 192 kbps */

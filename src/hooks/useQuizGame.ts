@@ -19,6 +19,7 @@ import {
   OUTRO_VIDEO_PATH,
   outroQuizVideoIndexForScore,
   QUIZ_FEEDBACK_DELAY_MS,
+  QUIZ_FEEDBACK_DELAY_WRONG_MS,
   ROUND_DELAY_MS,
   STOP_SAFETY_MARGIN_SEC,
   TRANSITION_FADE_MS,
@@ -105,6 +106,14 @@ export function useQuizGame() {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showRulesOverlay, setShowRulesOverlay] = useState(false);
   const [isStartCinematic, setIsStartCinematic] = useState(false);
+  /** Режим предпросмотра из редактора: `?preview=1&previewMode=…` (читается один раз до сброса URL). */
+  const [previewEditorGameMode] = useState<GameMode>(() => {
+    if (typeof window === "undefined") return "freestyle";
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("preview") !== "1") return "freestyle";
+    return sp.get("previewMode") === "quiz" ? "quiz" : "freestyle";
+  });
+
   const [gameMode, setGameMode] = useState<GameMode | null>(null);
   const [quizScore, setQuizScore] = useState(0);
   const [quizOptions, setQuizOptions] = useState<string[]>([]);
@@ -289,10 +298,11 @@ export function useQuizGame() {
     playQuizAnswerFeedbackSound(isCorrect);
     clearQuizFeedbackTimeout();
     setRoundState("quiz_feedback");
+    const feedbackMs = isCorrect ? QUIZ_FEEDBACK_DELAY_MS : QUIZ_FEEDBACK_DELAY_WRONG_MS;
     quizFeedbackTimeoutRef.current = window.setTimeout(() => {
       quizFeedbackTimeoutRef.current = null;
       enterRevealState();
-    }, QUIZ_FEEDBACK_DELAY_MS);
+    }, feedbackMs);
   };
 
   const startGuessCountdown = (guessSec: number) => {
@@ -441,10 +451,14 @@ export function useQuizGame() {
   };
 
   useEffect(() => {
-    if (previewRound) {
-      setGameMode("freestyle");
+    if (!previewRound) return;
+    setGameMode(previewEditorGameMode);
+    if (previewEditorGameMode === "quiz") {
+      quizDistractorPoolRef.current = buildQuizEligiblePool(visibleRoundsForSession());
+    } else {
+      quizDistractorPoolRef.current = [];
     }
-  }, [previewRound]);
+  }, [previewRound, previewEditorGameMode]);
 
   useEffect(() => {
     if (!previewRound) {

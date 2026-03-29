@@ -55,7 +55,7 @@ export function buildQuizOptionsOneLine(
   return { options, correctIndex: correctIndex >= 0 ? correctIndex : 0 };
 }
 
-/** Собирает MC: одна строка ответа или две (неверные: случайно 1–3 полных двухстрочных + склейки однострочных). */
+/** Собирает MC: одна строка ответа или две (неверные: случайно 1–2 полных двухстрочных + склейки однострочных). */
 export function buildQuizMcOptions(
   round: Round,
   distractorPool: Round[],
@@ -107,7 +107,7 @@ function buildMergedHalvesFromTwoLineRounds(pool: Round[], excludeId: number, co
 }
 
 /**
- * Четыре варианта: правильный (две строки) + среди неверных случайно от 1 до 3 полноценных
+ * Четыре варианта: правильный (две строки) + среди неверных случайно от 1 до 2 полноценных
  * двухстрочных ответов из других раундов; остальные неверные — склейка двух однострочных ответов.
  */
 export function buildQuizOptionsTwoLine(
@@ -126,7 +126,7 @@ export function buildQuizOptionsTwoLine(
     ],
   );
 
-  const maxTwoLineWrong = Math.min(3, twoLineTexts.length);
+  const maxTwoLineWrong = Math.min(2, twoLineTexts.length);
   const twoLineWrongCount =
     maxTwoLineWrong === 0 ? 0 : 1 + Math.floor(Math.random() * maxTwoLineWrong);
 

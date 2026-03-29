@@ -43,6 +43,9 @@ body,
 .app-shell-quiz {
   justify-content: stretch;
   align-items: stretch;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
 }
 
 .app-shell-start {
@@ -880,6 +883,21 @@ video.youtube-bg.quiz-bg-video {
   gap: clamp(6px, 1.5vmin, 14px);
   padding: 0 8px;
   overflow: hidden;
+}
+
+.quiz-content-fit-outer {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.quiz-content-fit-inner {
+  width: 100%;
+  max-width: 700px;
 }
 
 .quiz-title {
