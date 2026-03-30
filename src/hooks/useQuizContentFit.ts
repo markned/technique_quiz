@@ -27,8 +27,15 @@ export function useQuizContentFit(measureKey: unknown) {
       const naturalH = inner.scrollHeight;
       if (naturalH <= 0) return;
 
-      const s = Math.max(MIN_SCALE, Math.min(1, avail / naturalH));
+      let s = Math.max(MIN_SCALE, Math.min(1, avail / naturalH));
       st.zoom = String(s);
+      void inner.offsetHeight;
+
+      const rendered = inner.getBoundingClientRect().height;
+      if (rendered > avail + 1 && rendered > 0) {
+        const s2 = Math.max(MIN_SCALE, Math.min(s, s * (avail / rendered)));
+        st.zoom = String(s2);
+      }
     };
 
     const schedule = () => requestAnimationFrame(fit);
@@ -39,10 +46,12 @@ export function useQuizContentFit(measureKey: unknown) {
     void document.fonts?.ready?.then(schedule);
     schedule();
     window.addEventListener("orientationchange", schedule);
+    window.addEventListener("resize", schedule);
 
     return () => {
       ro.disconnect();
       window.removeEventListener("orientationchange", schedule);
+      window.removeEventListener("resize", schedule);
     };
   }, [measureKey]);
 

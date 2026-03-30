@@ -913,6 +913,23 @@ video.youtube-bg.quiz-bg-video {
 .quiz-content-fit-inner {
   width: 100%;
   max-width: 700px;
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Внутри масштабируемого блока подсказки и варианты MC — один кегль и межстрочный */
+.quiz-content-fit-inner .lyric-line.genius-bar {
+  font-size: clamp(0.78rem, 2.1vw + 0.32rem, 1.65rem);
+  line-height: 1.3;
+}
+
+.quiz-content-fit-inner
+  .quiz-options-panel.genius-style
+  button.lyric-line.genius-bar.quiz-option
+  .quiz-option-segment
+  + .quiz-option-segment {
+  margin-top: 0.22em;
 }
 
 .quiz-title {
@@ -1487,7 +1504,7 @@ video.youtube-bg.quiz-bg-video {
   color: rgba(180, 220, 255, 0.95);
 }
 
-/* Варианты викторины — чёрные строки как финальный ответ Genius; выбор — двойное кольцо; фидбек — анимация «перетекания» */
+/* Варианты викторины — чёрные строки как финальный ответ Genius; выбор — двойное кольцо; фидбек — bloom / полосы */
 .quiz-options-panel.genius-style {
   width: 100%;
   max-width: 700px;
@@ -1523,7 +1540,7 @@ video.youtube-bg.quiz-bg-video {
   background: #000;
   color: #fff;
   font-weight: 700;
-  line-height: 1.52;
+  line-height: 1.3;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
   transition: box-shadow 0.22s ease, transform 0.22s ease, filter 0.22s ease;
   animation: quiz-option-shake 2.6s ease-in-out infinite;
@@ -1536,7 +1553,7 @@ video.youtube-bg.quiz-bg-video {
 }
 
 .quiz-options-panel.genius-style button.lyric-line.genius-bar.quiz-option .quiz-option-segment + .quiz-option-segment {
-  margin-top: 0.42em;
+  margin-top: 0.22em;
 }
 
 .quiz-options-panel.genius-style div.lyric-line.genius-bar.quiz-option.quiz-order-row {
@@ -1708,11 +1725,6 @@ video.youtube-bg.quiz-bg-video {
 @media (max-width: 600px) {
   .quiz-options-grid {
     grid-template-columns: 1fr;
-  }
-
-  .quiz-options-panel.genius-style button.lyric-line.genius-bar.quiz-option,
-  .quiz-options-panel.genius-style div.lyric-line.genius-bar.quiz-option.quiz-order-row {
-    font-size: clamp(0.75rem, 3.6vw + 0.28rem, 1.05rem);
   }
 }
 
