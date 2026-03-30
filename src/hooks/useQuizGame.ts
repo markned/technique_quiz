@@ -26,7 +26,7 @@ import {
   QUIZ_FEEDBACK_DELAY_MS,
   QUIZ_FEEDBACK_DELAY_WRONG_MS,
   ROUND_DELAY_MS,
-  STOP_SAFETY_MARGIN_SEC,
+  fragmentStopTimeSec,
   TRANSITION_FADE_MS,
 } from "../helpers/quizConfig";
 import { BACKGROUND_PHOTO_FILENAMES } from "virtual:background-photos";
@@ -359,10 +359,12 @@ export function useQuizGame() {
       const targetLines = visibleHintCountAtTime(time, activeRound, hintLineCount);
       setVisibleHintLineCount((prev) => Math.max(prev, targetLines));
 
-      if (time >= activeRound.end - STOP_SAFETY_MARGIN_SEC) {
+      const stopAt = fragmentStopTimeSec(activeRound.end);
+      if (time >= stopAt) {
         setVisibleHintLineCount(hintLineCount);
         player.pause();
-        pausedAtRef.current = time;
+        player.seekTo(stopAt);
+        pausedAtRef.current = stopAt;
         const guessSec = getGuessSeconds(activeRound.revealLineIds.length);
         if (preserveGuessTimer) {
           setTimerSoundsDucked(false);
@@ -663,7 +665,7 @@ export function useQuizGame() {
     stopPlaybackTimersAndFade();
     const player = ensurePlayer();
     if (!round) return;
-    const answerStart = round.end - STOP_SAFETY_MARGIN_SEC;
+    const answerStart = fragmentStopTimeSec(round.end);
     pausedAtRef.current = answerStart;
     unmutePlayer(player);
     player.seekTo(answerStart);

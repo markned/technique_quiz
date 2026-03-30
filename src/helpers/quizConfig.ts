@@ -25,7 +25,9 @@ export const assetUrlVideoRelative = (relativePath: string) =>
 /**
  * Тайминги викторины — правь здесь:
  * - getGuessSeconds(revealLineCount) — 1 строка ответа=30с, 2=45с, 3+=60с
- * - STOP_SAFETY_MARGIN_SEC — запас до `end`, чтобы не проскочить конец (сек)
+ * - STOP_SAFETY_MARGIN_SEC — запас до `end` (сек). Не делай слишком маленьким: между кадрами rAF и на
+ *   мобильных шаг `currentTime` легко «перепрыгивает» через порог; после паузы позиция всё равно
+ *   жёстко выставляется в `end - margin` (см. `fragmentStopTimeSec`).
  * - TRANSITION_FADE_MS — затухание в конце раунда; нарастание за ту же длительность на отрезке ДО start (мс)
  * - INTRO_VIDEO_SECONDS — сколько секунд показывать стартовое видео
  *
@@ -34,7 +36,13 @@ export const assetUrlVideoRelative = (relativePath: string) =>
 export const getGuessSeconds = (revealLineCount: number): number =>
   revealLineCount <= 1 ? 30 : revealLineCount === 2 ? 45 : 60;
 
-export const STOP_SAFETY_MARGIN_SEC = 0.02;
+/** ~4–5 кадров при 60 Hz + запас под мобильный движок; сама пауза дополнительно «прибивает» seek. */
+export const STOP_SAFETY_MARGIN_SEC = 0.07;
+
+/** Время, на котором останавливаем фрагмент (до `end`). */
+export function fragmentStopTimeSec(fragmentEndSec: number): number {
+  return Math.max(0, fragmentEndSec - STOP_SAFETY_MARGIN_SEC);
+}
 export const TRANSITION_FADE_MS = 2000;
 /** Плавная смена фото / YouTube-фона между раундами (мс) */
 export const BACKGROUND_CROSSFADE_MS = 1400;
