@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { QuizUiVariant } from "../helpers/quizOptions";
 import type { GameMode, LyricLine, Round, RoundState } from "../types";
 import { useQuizContentFit } from "../hooks/useQuizContentFit";
@@ -73,7 +74,19 @@ export function QuizScreen(props: QuizScreenProps) {
     quizUiVariant === "order" &&
     (roundState === "playing" || roundState === "paused_for_guess");
 
-  const { containerRef: quizFitOuterRef, innerRef: quizFitInnerRef } = useQuizContentFit();
+  const quizFitMeasureKey = useMemo(
+    () =>
+      [
+        round.id,
+        roundState,
+        visibleHintLineCount,
+        quizOptions.join("\u0001"),
+        quizOrderUserIds.join(","),
+        quizUiVariant ?? "",
+      ].join("|"),
+    [round.id, roundState, visibleHintLineCount, quizOptions, quizOrderUserIds, quizUiVariant],
+  );
+  const { containerRef: quizFitOuterRef, innerRef: quizFitInnerRef } = useQuizContentFit(quizFitMeasureKey);
 
   return (
     <div className="quiz-screen">

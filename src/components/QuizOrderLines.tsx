@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { Reorder } from "framer-motion";
 import type { RoundState } from "../types";
 
 type QuizOrderLinesProps = {
@@ -18,10 +18,11 @@ export function QuizOrderLines({
   disabled,
   onReorder,
 }: QuizOrderLinesProps) {
-  const dragFrom = useRef<number | null>(null);
   const isFeedback = roundState === "quiz_feedback";
   const visible = (roundState === "paused_for_guess" || isFeedback) && orderedIds.length >= 3;
   if (!visible) return null;
+
+  const dragEnabled = !disabled && !isFeedback;
 
   const move = (from: number, to: number) => {
     if (from === to || disabled || isFeedback) return;
@@ -31,28 +32,15 @@ export function QuizOrderLines({
     onReorder(next);
   };
 
-  const onDragStart = (idx: number) => (e: React.DragEvent) => {
-    dragFrom.current = idx;
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", String(idx));
-  };
-
-  const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  };
-
-  const onDrop = (toIdx: number) => (e: React.DragEvent) => {
-    e.preventDefault();
-    const from = dragFrom.current;
-    dragFrom.current = null;
-    if (from === null || from === toIdx || disabled || isFeedback) return;
-    move(from, toIdx);
-  };
-
   return (
     <section className="quiz-options-panel genius-style quiz-order-panel" aria-label="Порядок строк ответа">
-      <ol className="quiz-order-list">
+      <Reorder.Group
+        axis="y"
+        as="ol"
+        className="quiz-order-list"
+        values={orderedIds}
+        onReorder={onReorder}
+      >
         {orderedIds.map((id, idx) => {
           const ok = isFeedback && correctIds[idx] === id;
           const rowCls =
@@ -62,14 +50,16 @@ export function QuizOrderLines({
             (isFeedback && ok ? " quiz-option--correct" : "") +
             (isFeedback && !ok ? " quiz-option--wrong" : "");
           return (
-            <li key={`${id}-${idx}`} className="quiz-order-li">
-              <div
-                className={rowCls}
-                draggable={!disabled && !isFeedback}
-                onDragStart={onDragStart(idx)}
-                onDragOver={onDragOver}
-                onDrop={onDrop(idx)}
-              >
+            <Reorder.Item
+              key={id}
+              value={id}
+              as="li"
+              className="quiz-order-li"
+              drag={dragEnabled}
+              layout="position"
+              transition={{ type: "spring", stiffness: 520, damping: 38 }}
+            >
+              <div className={rowCls}>
                 {!isFeedback ? (
                   <span className="quiz-order-grip" aria-hidden title="Перетащить строку">
                     <span className="quiz-order-grip__dots" />
@@ -99,10 +89,10 @@ export function QuizOrderLines({
                   </div>
                 ) : null}
               </div>
-            </li>
+            </Reorder.Item>
           );
         })}
-      </ol>
+      </Reorder.Group>
     </section>
   );
 }

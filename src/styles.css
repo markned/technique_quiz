@@ -38,6 +38,8 @@ body,
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .app-shell-quiz {
@@ -410,7 +412,9 @@ video.youtube-bg.quiz-bg-video {
 }
 
 .start-screen-disclaimer-rip {
-  color: rgba(248, 251, 255, 0.5);
+  margin: 0 0 0.35rem;
+  color: rgba(248, 251, 255, 0.55);
+  font-weight: 600;
 }
 
 .start-icon {
@@ -1337,6 +1341,8 @@ video.youtube-bg.quiz-bg-video {
   overflow: hidden;
   background: #000;
   z-index: 1;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Тач: автодемо — неактивная половина чуть тусклее */
@@ -1909,6 +1915,13 @@ video.youtube-bg.quiz-bg-video {
 
 .quiz-order-panel.quiz-options-panel.genius-style {
   margin: 12px 0 16px;
+  overflow: visible;
+}
+
+@media (pointer: coarse) {
+  .quiz-order-row__nudges {
+    display: none;
+  }
 }
 
 .quiz-order-list {

@@ -1,11 +1,12 @@
 import { useLayoutEffect, useRef } from "react";
 
-const MIN_SCALE = 0.28;
+const MIN_SCALE = 0.22;
 
 /**
  * Масштабирует блок с вопросами/подсказками/вариантами (CSS zoom), чтобы всё помещалось по высоте без скролла.
+ * `measureKey` — при смене контента (варианты, строки порядка и т.д.) пересчитываем масштаб.
  */
-export function useQuizContentFit() {
+export function useQuizContentFit(measureKey: unknown) {
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +44,7 @@ export function useQuizContentFit() {
       ro.disconnect();
       window.removeEventListener("orientationchange", schedule);
     };
-  }, []);
+  }, [measureKey]);
 
   return { containerRef, innerRef };
 }

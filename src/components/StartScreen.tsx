@@ -18,6 +18,21 @@ export function StartScreen({ onStart }: StartScreenProps) {
         </button>
       </div>
       <div className="start-screen-footer">
+        <div className="start-screen-disclaimer" role="note">
+          <p className="start-screen-disclaimer-rip">
+            R.I.P. Legend
+            <br />
+            01.07.84 - 04.04.25
+          </p>
+          <p>
+            Данный материал создан в некоммерческих целях исключительно из любви и уважения к творчеству Ивлева Павла
+            Николаевича.
+          </p>
+          <p>
+            Автор категорически осуждает употребление наркотических и иных опасных веществ. Материал не содержит призыва
+            к употреблению и не является его пропагандой. Если у вас проблемы – обратитесь за помощью к специалисту.
+          </p>
+        </div>
         <div className="start-screen-author" aria-label="Социальные сети">
           <a
             href="https://t.me/hm_que_mark"
@@ -37,21 +52,6 @@ export function StartScreen({ onStart }: StartScreenProps) {
           >
             <img src={assetUrl("/content/icons/instagram.png")} alt="" width={32} height={32} decoding="async" />
           </a>
-        </div>
-        <div className="start-screen-disclaimer" role="note">
-          <p>
-            Данный материал создан в некоммерческих целях исключительно из любви и уважения к творчеству
-            Паши Техника.
-          </p>
-          <p>
-            Автор категорически осуждает употребление наркотических и иных опасных веществ. Материал не содержит призыва
-            к употреблению и не является его пропагандой. 
-          </p>
-          <p className="start-screen-disclaimer-rip">
-            R.I.P. Legend
-            <br />
-            01.07.84 - 04.04.25
-          </p>
         </div>
       </div>
     </div>

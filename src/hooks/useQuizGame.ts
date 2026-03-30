@@ -7,7 +7,12 @@ import { useGesturePauseLayout } from "./useGesturePauseLayout";
 import { pickLyricLines } from "../helpers/lyrics";
 import { getYouTubeEmbedUrl, toLocalMediaUrl } from "../helpers/media";
 import { buildQuizEligiblePool, buildQuizSessionPlayOrder } from "../helpers/quizMode";
-import { buildQuizMcOptions, getQuizUiVariant, type QuizUiVariant } from "../helpers/quizOptions";
+import {
+  buildQuizMcOptions,
+  getQuizUiVariant,
+  revealAnswerText,
+  type QuizUiVariant,
+} from "../helpers/quizOptions";
 import { shuffle } from "../helpers/shuffle";
 import { buildSessionPlayOrder } from "../helpers/quizOrder";
 import { buildBackgroundPhotoSequence } from "../helpers/backgroundPhotos";
@@ -144,6 +149,8 @@ export function useQuizGame() {
   const quizUiVariantRef = useRef<QuizUiVariant | null>(null);
   const quizOrderUserIdsRef = useRef<number[]>([]);
   const quizDistractorPoolRef = useRef<Round[]>([]);
+  /** Тексты правильных ответов по уже пройденным раундам викторины — не повторять как дистракторы. */
+  const quizPriorCorrectAnswersRef = useRef<Set<string>>(new Set());
   const quizFeedbackTimeoutRef = useRef<number | null>(null);
   const [quizCorrectIndex, setQuizCorrectIndex] = useState(0);
   const replaySnippetRef = useRef<() => void>(() => {});
@@ -294,6 +301,9 @@ export function useQuizGame() {
     }
     if (isCorrect) {
       setQuizScore((s) => s + 1);
+      if (r) {
+        quizPriorCorrectAnswersRef.current.add(revealAnswerText(r));
+      }
     }
     playQuizAnswerFeedbackSound(isCorrect);
     clearQuizFeedbackTimeout();
@@ -387,7 +397,7 @@ export function useQuizGame() {
       const v = getQuizUiVariant(r);
       setQuizUiVariant(v);
       if (v === "mc4") {
-        const built = buildQuizMcOptions(r, quizDistractorPoolRef.current);
+        const built = buildQuizMcOptions(r, quizDistractorPoolRef.current, quizPriorCorrectAnswersRef.current);
         quizCorrectIndexRef.current = built.correctIndex;
         setQuizCorrectIndex(built.correctIndex);
         setQuizOptions(built.options);
@@ -458,6 +468,7 @@ export function useQuizGame() {
     } else {
       quizDistractorPoolRef.current = [];
     }
+    quizPriorCorrectAnswersRef.current.clear();
   }, [previewRound, previewEditorGameMode]);
 
   useEffect(() => {
@@ -735,6 +746,7 @@ export function useQuizGame() {
   const selectGameMode = (mode: GameMode) => {
     setGameMode(mode);
     const visible = visibleRoundsForSession();
+    quizPriorCorrectAnswersRef.current.clear();
     if (mode === "quiz") {
       quizDistractorPoolRef.current = buildQuizEligiblePool(visible);
       setPlayOrder(buildQuizSessionPlayOrder(visible));
@@ -859,6 +871,7 @@ export function useQuizGame() {
     setQuizOrderUserIds([]);
     setSelectedQuizIndex(null);
     setQuizCorrectIndex(0);
+    quizPriorCorrectAnswersRef.current.clear();
     setRoundState("intro");
   };
 
@@ -887,6 +900,7 @@ export function useQuizGame() {
     setTimerSeconds(60);
     setGameMode(null);
     quizDistractorPoolRef.current = [];
+    quizPriorCorrectAnswersRef.current.clear();
     setPlayOrder(buildSessionPlayOrder(visibleRoundsForSession()));
     setIsStartCinematic(false);
     setRoundState("mode_select");

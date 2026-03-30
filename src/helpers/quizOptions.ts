@@ -19,16 +19,19 @@ export function getQuizUiVariant(round: Round): QuizUiVariant | null {
 
 /**
  * Четыре варианта для ответа в одну строку: правильный + три отличных от других однострочных раундов.
+ * `priorCorrectAnswers` — тексты уже бывших правильными ответами в этой сессии; не используются как дистракторы.
  */
 export function buildQuizOptionsOneLine(
   round: Round,
   distractorPool: Round[],
+  priorCorrectAnswers?: ReadonlySet<string>,
 ): { options: string[]; correctIndex: number } {
   const correct = revealAnswerText(round);
+  const prior = priorCorrectAnswers ?? new Set<string>();
   const wrongCandidates = distractorPool
     .filter((r) => r.id !== round.id && r.revealLineIds.length === 1)
     .map((r) => revealAnswerText(r))
-    .filter((t) => t !== correct);
+    .filter((t) => t !== correct && !prior.has(t));
 
   const uniqueShuffled = shuffle([...new Set(wrongCandidates)]);
   const wrong: string[] = [];
@@ -42,7 +45,7 @@ export function buildQuizOptionsOneLine(
   while (wrong.length < 3 && fb.length > 0) {
     const t = fb[fi % fb.length]!;
     fi += 1;
-    if (t === correct) continue;
+    if (t === correct || prior.has(t)) continue;
     if (!wrong.includes(t)) wrong.push(t);
   }
 
@@ -59,12 +62,13 @@ export function buildQuizOptionsOneLine(
 export function buildQuizMcOptions(
   round: Round,
   distractorPool: Round[],
+  priorCorrectAnswers?: ReadonlySet<string>,
 ): { options: string[]; correctIndex: number } {
   const n = round.revealLineIds.length;
   if (n === 1) {
-    return buildQuizOptionsOneLine(round, distractorPool);
+    return buildQuizOptionsOneLine(round, distractorPool, priorCorrectAnswers);
   }
-  return buildQuizOptionsTwoLine(round, distractorPool);
+  return buildQuizOptionsTwoLine(round, distractorPool, priorCorrectAnswers);
 }
 
 /** Склейка двух разных однострочных ответов в «двухстрочный» вариант. */
@@ -73,6 +77,7 @@ function buildGluedDistractorFromOneLiners(
   excludeId: number,
   correct: string,
   used: Set<string>,
+  prior: ReadonlySet<string>,
 ): string | null {
   const singles = pool.filter((r) => r.id !== excludeId && r.revealLineIds.length === 1);
   if (singles.length < 2) return null;
@@ -84,13 +89,19 @@ function buildGluedDistractorFromOneLiners(
     const cross1 = `${a}\n${b}`;
     const cross2 = `${b}\n${a}`;
     const pick = Math.random() < 0.5 ? cross1 : cross2;
-    if (pick !== correct && !used.has(pick)) return pick;
+    if (pick !== correct && !used.has(pick) && !prior.has(pick)) return pick;
   }
   return null;
 }
 
 /** Резерв: склейка половинок из двух чужих двухстрочных раундов. */
-function buildMergedHalvesFromTwoLineRounds(pool: Round[], excludeId: number, correct: string, used: Set<string>): string | null {
+function buildMergedHalvesFromTwoLineRounds(
+  pool: Round[],
+  excludeId: number,
+  correct: string,
+  used: Set<string>,
+  prior: ReadonlySet<string>,
+): string | null {
   const others = pool.filter((r) => r.id !== excludeId && r.revealLineIds.length === 2);
   if (others.length < 2) return null;
   for (let attempt = 0; attempt < 20; attempt++) {
@@ -101,7 +112,7 @@ function buildMergedHalvesFromTwoLineRounds(pool: Round[], excludeId: number, co
     const lb = pickLyricLines(b.lyrics, b.revealLineIds);
     if (la.length < 2 || lb.length < 2) continue;
     const pick = Math.random() < 0.5 ? `${la[0].text}\n${lb[1].text}` : `${lb[0].text}\n${la[1].text}`;
-    if (pick !== correct && !used.has(pick)) return pick;
+    if (pick !== correct && !used.has(pick) && !prior.has(pick)) return pick;
   }
   return null;
 }
@@ -113,15 +124,17 @@ function buildMergedHalvesFromTwoLineRounds(pool: Round[], excludeId: number, co
 export function buildQuizOptionsTwoLine(
   round: Round,
   distractorPool: Round[],
+  priorCorrectAnswers?: ReadonlySet<string>,
 ): { options: string[]; correctIndex: number } {
   const correct = revealAnswerText(round);
+  const prior = priorCorrectAnswers ?? new Set<string>();
   const twoLineTexts = shuffle(
     [
       ...new Set(
         distractorPool
           .filter((r) => r.id !== round.id && r.revealLineIds.length === 2)
           .map((r) => revealAnswerText(r))
-          .filter((t) => t !== correct),
+          .filter((t) => t !== correct && !prior.has(t)),
       ),
     ],
   );
@@ -144,9 +157,9 @@ export function buildQuizOptionsTwoLine(
   let fillGuard = 0;
   while (wrong.length < 3 && fillGuard < 120) {
     fillGuard += 1;
-    let next = buildGluedDistractorFromOneLiners(distractorPool, round.id, correct, used);
+    let next = buildGluedDistractorFromOneLiners(distractorPool, round.id, correct, used, prior);
     if (!next) {
-      next = buildMergedHalvesFromTwoLineRounds(distractorPool, round.id, correct, used);
+      next = buildMergedHalvesFromTwoLineRounds(distractorPool, round.id, correct, used, prior);
     }
     if (next && !used.has(next)) {
       wrong.push(next);
