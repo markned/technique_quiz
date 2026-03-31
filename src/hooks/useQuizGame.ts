@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { rounds as allRounds } from "../content/rounds";
 import { LocalMediaPlayer } from "../adapters/localMediaPlayer";
 import type { PlayerAdapter } from "../adapters/player";
 import { useCoarsePointer } from "./useCoarsePointer";
@@ -13,7 +12,7 @@ import {
   revealAnswerText,
   type QuizUiVariant,
 } from "../helpers/quizOptions";
-import { shuffle } from "../helpers/shuffle";
+import { shuffleUntilOrderDiffers } from "../helpers/shuffle";
 import { buildSessionPlayOrder } from "../helpers/quizOrder";
 import { buildBackgroundPhotoSequence } from "../helpers/backgroundPhotos";
 import {
@@ -44,56 +43,17 @@ import {
   stopAllTimerCountSounds,
 } from "../lib/timerSounds";
 import type { GameMode, Round, RoundState } from "../types";
-import {
-  clearPreviewRoundStorage,
-  editorHref,
-  isPreviewQueryActive,
-  loadPreviewRoundFromStorageAsync,
-  parsePreviewRoundFromSession,
-  stripPreviewQueryFromUrl,
-} from "../editor/previewRoundStorage";
+import { editorHref, isPreviewQueryActive, parsePreviewRoundFromSession } from "../editor/previewRoundStorage";
 import { subscribeMasterVolume } from "../lib/masterVolume";
+import { readPreviewEditorGameModeFromSearch } from "../helpers/previewEditorMode";
+import { visibleRoundsForSession } from "../helpers/sessionRounds";
+import { useInitialPreviewRound } from "./useInitialPreviewRound";
+import { useQuizKeyboardShortcuts } from "./useQuizKeyboardShortcuts";
 
 const createPlayer = (): PlayerAdapter => new LocalMediaPlayer();
 
-function visibleRoundsForSession(): Round[] {
-  return allRounds.filter((r) => !r.hidden);
-}
-
 function tryParseInlinePreviewRound(): Round | null {
   return parsePreviewRoundFromSession();
-}
-
-function useInitialPreviewRound(): { previewRound: Round | null; previewLoading: boolean } {
-  const [previewRound, setPreviewRound] = useState<Round | null>(() => tryParseInlinePreviewRound());
-  const [previewLoading, setPreviewLoading] = useState(
-    () => isPreviewQueryActive() && tryParseInlinePreviewRound() === null,
-  );
-
-  useEffect(() => {
-    if (!previewLoading) return;
-    let cancelled = false;
-    void loadPreviewRoundFromStorageAsync().then((r) => {
-      if (cancelled) return;
-      clearPreviewRoundStorage();
-      stripPreviewQueryFromUrl();
-      setPreviewRound(r);
-      setPreviewLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [previewLoading]);
-
-  useEffect(() => {
-    if (previewLoading) return;
-    if (!previewRound) return;
-    if (!isPreviewQueryActive()) return;
-    clearPreviewRoundStorage();
-    stripPreviewQueryFromUrl();
-  }, [previewLoading, previewRound]);
-
-  return { previewRound, previewLoading };
 }
 
 export function useQuizGame() {
@@ -112,13 +72,7 @@ export function useQuizGame() {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showRulesOverlay, setShowRulesOverlay] = useState(false);
   const [isStartCinematic, setIsStartCinematic] = useState(false);
-  /** Режим предпросмотра из редактора: `?preview=1&previewMode=…` (читается один раз до сброса URL). */
-  const [previewEditorGameMode] = useState<GameMode>(() => {
-    if (typeof window === "undefined") return "freestyle";
-    const sp = new URLSearchParams(window.location.search);
-    if (sp.get("preview") !== "1") return "freestyle";
-    return sp.get("previewMode") === "quiz" ? "quiz" : "freestyle";
-  });
+  const [previewEditorGameMode] = useState<GameMode>(readPreviewEditorGameModeFromSearch);
 
   const [gameMode, setGameMode] = useState<GameMode | null>(null);
   const [quizScore, setQuizScore] = useState(0);
@@ -160,6 +114,23 @@ export function useQuizGame() {
   const confirmQuizRoundRef = useRef<() => void>(() => {});
   /** После перехода из редактора `?preview=1` — новая страница без жеста; Safari блокирует звук до первого касания. */
   const previewInitialGestureDoneRef = useRef(false);
+
+  const resetQuizRoundUi = useCallback(() => {
+    setQuizScore(0);
+    setQuizOptions([]);
+    setQuizUiVariant(null);
+    setQuizOrderUserIds([]);
+    setSelectedQuizIndex(null);
+    setQuizCorrectIndex(0);
+    quizPriorCorrectAnswersRef.current.clear();
+  }, []);
+
+  const dismissOverlayChrome = useCallback(() => {
+    setShowRestartConfirm(false);
+    setShowExitConfirm(false);
+    setShowRulesOverlay(false);
+  }, []);
+
   roundStateRef.current = roundState;
   gameModeRef.current = gameMode;
   timerSecondsRef.current = timerSeconds;
@@ -417,14 +388,7 @@ export function useQuizGame() {
         setQuizCorrectIndex(0);
         setQuizOptions([]);
         setSelectedQuizIndex(null);
-        const ids = r.revealLineIds;
-        let shuffled = shuffle([...ids]);
-        let tries = 0;
-        while (tries < 40 && ids.length === shuffled.length && ids.every((id, i) => id === shuffled[i])) {
-          shuffled = shuffle([...ids]);
-          tries += 1;
-        }
-        setQuizOrderUserIds(shuffled);
+        setQuizOrderUserIds(shuffleUntilOrderDiffers(r.revealLineIds));
       } else {
         setQuizOptions([]);
         setSelectedQuizIndex(null);
@@ -778,90 +742,26 @@ export function useQuizGame() {
   handleRevealClickRef.current = handleRevealClick;
   confirmQuizRoundRef.current = confirmQuizRound;
 
-  useEffect(() => {
-    if (!isQuizMainView) {
-      return;
-    }
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (showRestartConfirm || showExitConfirm) {
-        return;
-      }
-      if (showRulesOverlay) {
-        if (e.code === "Escape") {
-          e.preventDefault();
-          setShowRulesOverlay(false);
-        }
-        return;
-      }
-      const el = e.target as HTMLElement | null;
-      if (el?.closest?.("input, textarea, select, [contenteditable]")) {
-        return;
-      }
-
-      const rs = roundStateRef.current;
-      if (rs === "transition") {
-        if (e.code === "Space") {
-          e.preventDefault();
-        }
-        return;
-      }
-
-      if (rs === "quiz_feedback") {
-        e.preventDefault();
-        return;
-      }
-
-      if (e.code === "Escape") {
-        e.preventDefault();
-        toggleGamePauseRef.current();
-        return;
-      }
-
-      if (e.code === "KeyR" && !e.repeat) {
-        e.preventDefault();
-        replaySnippetRef.current();
-        return;
-      }
-
-      if (e.code === "ArrowRight" && !e.repeat) {
-        if (gamePausedRef.current) {
-          return;
-        }
-        if (rs !== "reveal") {
-          return;
-        }
-        e.preventDefault();
-        nextRoundRef.current();
-        return;
-      }
-
-      if (e.code === "Space" || e.key === " ") {
-        if (gamePausedRef.current) {
-          return;
-        }
-        if (rs === "reveal") {
-          e.preventDefault();
-          return;
-        }
-        if (gameModeRef.current === "quiz" && rs === "paused_for_guess") {
-          e.preventDefault();
-          confirmQuizRoundRef.current();
-          return;
-        }
-        e.preventDefault();
-        handleRevealClickRef.current();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isQuizMainView, showRestartConfirm, showExitConfirm, showRulesOverlay]);
+  useQuizKeyboardShortcuts({
+    isQuizMainView,
+    showRestartConfirm,
+    showExitConfirm,
+    showRulesOverlay,
+    setShowRulesOverlay,
+    roundStateRef,
+    gameModeRef,
+    gamePausedRef,
+    toggleGamePauseRef,
+    replaySnippetRef,
+    nextRoundRef,
+    confirmQuizRoundRef,
+    handleRevealClickRef,
+  });
 
   const exitToStartScreen = () => {
     stopPlaybackTimersAndFade();
     setGamePaused(false);
-    setShowRestartConfirm(false);
-    setShowExitConfirm(false);
-    setShowRulesOverlay(false);
+    dismissOverlayChrome();
     playerRef.current?.pause();
     playerRef.current?.setVolume(1);
     if (previewRound) {
@@ -874,13 +774,7 @@ export function useQuizGame() {
     resetHiddenRevealTap();
     setIsStartCinematic(false);
     setGameMode(null);
-    setQuizScore(0);
-    setQuizOptions([]);
-    setQuizUiVariant(null);
-    setQuizOrderUserIds([]);
-    setSelectedQuizIndex(null);
-    setQuizCorrectIndex(0);
-    quizPriorCorrectAnswersRef.current.clear();
+    resetQuizRoundUi();
     setRoundState("intro");
   };
 
@@ -892,24 +786,16 @@ export function useQuizGame() {
     }
     stopPlaybackTimersAndFade();
     setGamePaused(false);
-    setShowRestartConfirm(false);
-    setShowExitConfirm(false);
-    setShowRulesOverlay(false);
+    dismissOverlayChrome();
     playerRef.current?.pause();
     playerRef.current?.setVolume(1);
     setRoundIndex(0);
     setVisibleHintLineCount(0);
     resetHiddenRevealTap();
-    setQuizScore(0);
-    setQuizOptions([]);
-    setQuizUiVariant(null);
-    setQuizOrderUserIds([]);
-    setSelectedQuizIndex(null);
-    setQuizCorrectIndex(0);
+    resetQuizRoundUi();
     setTimerSeconds(60);
     setGameMode(null);
     quizDistractorPoolRef.current = [];
-    quizPriorCorrectAnswersRef.current.clear();
     setPlayOrder(buildSessionPlayOrder(visibleRoundsForSession()));
     setIsStartCinematic(false);
     setRoundState("mode_select");

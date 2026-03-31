@@ -8,6 +8,26 @@ export const shuffle = <T,>(items: T[]): T[] => {
   return copy;
 };
 
+/**
+ * Перемешивает копию массива, пока порядок не отличается от исходного (до maxTries).
+ * Для викторины: порядок строк ответа не должен совпадать с правильным при старте.
+ */
+export function shuffleUntilOrderDiffers<T>(original: readonly T[], maxTries = 40): T[] {
+  const items = [...original];
+  if (items.length <= 1) return items;
+  let shuffled = shuffle(items);
+  let tries = 0;
+  while (
+    tries < maxTries &&
+    items.length === shuffled.length &&
+    items.every((id, i) => id === shuffled[i])
+  ) {
+    shuffled = shuffle([...items]);
+    tries += 1;
+  }
+  return shuffled;
+}
+
 /** Переупорядочивает раунды так, чтобы один трек (title) не шёл два раза подряд. */
 export const reorderNoConsecutiveSameTitle = <T extends { title: string }>(rounds: T[]): T[] => {
   if (rounds.length <= 1) return [...rounds];
