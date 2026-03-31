@@ -150,7 +150,7 @@ export function useQuizGame() {
   const quizUiVariantRef = useRef<QuizUiVariant | null>(null);
   const quizOrderUserIdsRef = useRef<number[]>([]);
   const quizDistractorPoolRef = useRef<Round[]>([]);
-  /** Тексты правильных ответов по уже пройденным раундам викторины — не повторять как дистракторы. */
+  /** Тексты ответов по уже завершённым раундам викторины (после показа reveal) — не использовать как дистракторы. */
   const quizPriorCorrectAnswersRef = useRef<Set<string>>(new Set());
   const quizFeedbackTimeoutRef = useRef<number | null>(null);
   const [quizCorrectIndex, setQuizCorrectIndex] = useState(0);
@@ -308,9 +308,9 @@ export function useQuizGame() {
     }
     if (isCorrect) {
       setQuizScore((s) => s + 1);
-      if (r) {
-        quizPriorCorrectAnswersRef.current.add(revealAnswerText(r));
-      }
+    }
+    if (r) {
+      quizPriorCorrectAnswersRef.current.add(revealAnswerText(r));
     }
     playQuizAnswerFeedbackSound(isCorrect);
     clearQuizFeedbackTimeout();

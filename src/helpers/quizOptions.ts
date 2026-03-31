@@ -19,7 +19,7 @@ export function getQuizUiVariant(round: Round): QuizUiVariant | null {
 
 /**
  * Четыре варианта для ответа в одну строку: правильный + три отличных от других однострочных раундов.
- * `priorCorrectAnswers` — тексты уже бывших правильными ответами в этой сессии; не используются как дистракторы.
+ * `priorCorrectAnswers` — тексты ответов по уже завершённым раундам (после показа правильного ответа); не используются как дистракторы.
  */
 export function buildQuizOptionsOneLine(
   round: Round,
