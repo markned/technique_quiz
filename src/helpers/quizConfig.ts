@@ -4,6 +4,13 @@
  */
 export const DEFAULT_QUIZ_SESSION_LENGTH = 14;
 
+/** Последние N раундов викторины — только многострочный ответ (см. quizOrder). */
+export const QUIZ_HARD_TAIL_ROUND_COUNT = 4;
+
+/** Фристайл: короче сессия, в конце один «сложный» раунд (несколько строк ответа). */
+export const FREESTYLE_SESSION_LENGTH = 8;
+export const FREESTYLE_HARD_TAIL_ROUND_COUNT = 1;
+
 /** Базовый URL статики (`import.meta.env.BASE_URL` из Vite). */
 const BASE = `${(import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/")}`;
 

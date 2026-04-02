@@ -1,5 +1,10 @@
 import type { Round } from "../types";
-import { DEFAULT_QUIZ_SESSION_LENGTH } from "./quizConfig";
+import {
+  DEFAULT_QUIZ_SESSION_LENGTH,
+  FREESTYLE_HARD_TAIL_ROUND_COUNT,
+  FREESTYLE_SESSION_LENGTH,
+  QUIZ_HARD_TAIL_ROUND_COUNT,
+} from "./quizConfig";
 import { reorderNoConsecutiveSameTitle, shuffle } from "./shuffle";
 
 /** Ответ из нескольких строк (для «сложного» хвоста сессии). */
@@ -7,8 +12,15 @@ export function isMultiLineRevealRound(r: Round): boolean {
   return r.revealLineIds.length >= 2;
 }
 
-/** Последние N раундов сессии — только многострочный ответ. */
-const HARD_TAIL_ROUND_COUNT = 4;
+export type SessionPlayOrderParams = {
+  sessionLength: number;
+  hardTailRoundCount: number;
+};
+
+const defaultQuizParams: SessionPlayOrderParams = {
+  sessionLength: DEFAULT_QUIZ_SESSION_LENGTH,
+  hardTailRoundCount: QUIZ_HARD_TAIL_ROUND_COUNT,
+};
 
 function rotateUntilDifferentFromLast(head: Round[], tail: Round[]): Round[] {
   if (head.length === 0 || tail.length === 0) return tail;
@@ -23,18 +35,22 @@ function rotateUntilDifferentFromLast(head: Round[], tail: Round[]): Round[] {
 
 /**
  * Сессия: сначала более простые раунды (как в {@link shuffleWithinDifficultyBuckets}), последние
- * {@link HARD_TAIL_ROUND_COUNT} — только с ответом из двух и более строк.
+ * `hardTailRoundCount` — только с ответом из двух и более строк.
+ * По умолчанию — параметры викторины; для фристайла см. {@link buildFreestyleSessionPlayOrder}.
  */
-export function buildSessionPlayOrder(visible: Round[]): Round[] {
-  const sessionLen = DEFAULT_QUIZ_SESSION_LENGTH;
-  const headLen = sessionLen - HARD_TAIL_ROUND_COUNT;
+export function buildSessionPlayOrder(
+  visible: Round[],
+  params: SessionPlayOrderParams = defaultQuizParams,
+): Round[] {
+  const { sessionLength: sessionLen, hardTailRoundCount } = params;
+  const headLen = sessionLen - hardTailRoundCount;
 
   const multi = visible.filter(isMultiLineRevealRound);
-  if (multi.length < HARD_TAIL_ROUND_COUNT) {
+  if (multi.length < hardTailRoundCount) {
     return shuffleWithinDifficultyBuckets([...visible]).slice(0, sessionLen);
   }
 
-  const tailPick = shuffle([...multi]).slice(0, HARD_TAIL_ROUND_COUNT);
+  const tailPick = shuffle([...multi]).slice(0, hardTailRoundCount);
   const tailIds = new Set(tailPick.map((r) => r.id));
   const headPool = visible.filter((r) => !tailIds.has(r.id));
 
@@ -43,6 +59,14 @@ export function buildSessionPlayOrder(visible: Round[]): Round[] {
   const tail = rotateUntilDifferentFromLast(head, shuffle([...tailPick]));
 
   return [...head, ...tail];
+}
+
+/** Фристайл: 8 раундов, только последний — многострочный ответ. */
+export function buildFreestyleSessionPlayOrder(visible: Round[]): Round[] {
+  return buildSessionPlayOrder(visible, {
+    sessionLength: FREESTYLE_SESSION_LENGTH,
+    hardTailRoundCount: FREESTYLE_HARD_TAIL_ROUND_COUNT,
+  });
 }
 
 /**

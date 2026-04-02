@@ -5,7 +5,11 @@ import { useCoarsePointer } from "./useCoarsePointer";
 import { useGesturePauseLayout } from "./useGesturePauseLayout";
 import { pickLyricLines } from "../helpers/lyrics";
 import { getYouTubeEmbedUrl, toLocalMediaUrl } from "../helpers/media";
-import { buildQuizEligiblePool, buildQuizSessionPlayOrder } from "../helpers/quizMode";
+import {
+  buildQuizEligiblePool,
+  buildNextFreestyleSessionPlayOrder,
+  buildNextQuizSessionPlayOrder,
+} from "../helpers/quizMode";
 import {
   buildQuizMcOptions,
   getQuizUiVariant,
@@ -13,7 +17,7 @@ import {
   type QuizUiVariant,
 } from "../helpers/quizOptions";
 import { shuffleUntilOrderDiffers } from "../helpers/shuffle";
-import { buildSessionPlayOrder } from "../helpers/quizOrder";
+import { recordCompletedSessionRoundIds } from "../helpers/sessionPlayExclusion";
 import { buildBackgroundPhotoSequence } from "../helpers/backgroundPhotos";
 import {
   assetUrl,
@@ -149,7 +153,7 @@ export function useQuizGame() {
     const inline = tryParseInlinePreviewRound();
     if (inline) return [inline];
     if (isPreviewQueryActive()) return [];
-    return buildSessionPlayOrder(visibleRoundsForSession());
+    return buildNextFreestyleSessionPlayOrder(visibleRoundsForSession());
   });
 
   useEffect(() => {
@@ -159,7 +163,7 @@ export function useQuizGame() {
       return;
     }
     setPlayOrder((prev) =>
-      prev.length === 0 ? buildSessionPlayOrder(visibleRoundsForSession()) : prev,
+      prev.length === 0 ? buildNextFreestyleSessionPlayOrder(visibleRoundsForSession()) : prev,
     );
   }, [previewLoading, previewRound]);
 
@@ -175,6 +179,13 @@ export function useQuizGame() {
   orderedRoundsRef.current = orderedRounds;
   const roundIndexRef = useRef(0);
   roundIndexRef.current = roundIndex;
+
+  useEffect(() => {
+    if (roundState !== "finished") return;
+    if (previewRound) return;
+    const ids = orderedRoundsRef.current.map((r) => r.id);
+    recordCompletedSessionRoundIds(ids);
+  }, [roundState, previewRound]);
 
   const randomPhotoSequence = useMemo(
     () => buildBackgroundPhotoSequence(orderedRounds.length, BACKGROUND_PHOTO_FILENAMES),
@@ -722,10 +733,10 @@ export function useQuizGame() {
     quizPriorCorrectAnswersRef.current.clear();
     if (mode === "quiz") {
       quizDistractorPoolRef.current = buildQuizEligiblePool(visible);
-      setPlayOrder(buildQuizSessionPlayOrder(visible));
+      setPlayOrder(buildNextQuizSessionPlayOrder(visible));
     } else {
       quizDistractorPoolRef.current = [];
-      setPlayOrder(buildSessionPlayOrder(visible));
+      setPlayOrder(buildNextFreestyleSessionPlayOrder(visible));
     }
     setRoundState("rules");
   };
@@ -796,7 +807,7 @@ export function useQuizGame() {
     setTimerSeconds(60);
     setGameMode(null);
     quizDistractorPoolRef.current = [];
-    setPlayOrder(buildSessionPlayOrder(visibleRoundsForSession()));
+    setPlayOrder(buildNextFreestyleSessionPlayOrder(visibleRoundsForSession()));
     setIsStartCinematic(false);
     setRoundState("mode_select");
   };
