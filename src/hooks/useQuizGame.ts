@@ -8,7 +8,7 @@ import { useQuizRoundState } from "./useQuizRoundState";
 import { pickLyricLines } from "../helpers/lyrics";
 import { getYouTubeEmbedUrl, toLocalMediaUrl } from "../helpers/media";
 import { buildQuizEligiblePool, buildQuizSessionPlayOrder } from "../helpers/quizMode";
-import { buildSessionPlayOrder } from "../helpers/quizOrder";
+import { buildFreestyleSessionPlayOrder, buildSessionPlayOrder } from "../helpers/quizOrder";
 import { buildBackgroundPhotoSequence } from "../helpers/backgroundPhotos";
 import {
   assetUrl,
@@ -705,7 +705,7 @@ export function useQuizGame() {
       setPlayOrder(buildQuizSessionPlayOrder(visible));
     } else {
       quizDistractorPoolRef.current = [];
-      setPlayOrder(buildSessionPlayOrder(visible));
+      setPlayOrder(buildFreestyleSessionPlayOrder(visible));
     }
     setRoundState("rules");
   };

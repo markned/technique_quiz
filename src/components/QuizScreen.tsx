@@ -1,5 +1,6 @@
 import { memo, useCallback, useMemo } from "react";
 import type { QuizUiVariant } from "../helpers/quizOptions";
+import type { ReactNode } from "react";
 import type { GameMode, LyricLine, Round, RoundState } from "../types";
 import { useQuizContentFit } from "../hooks/useQuizContentFit";
 import { roundCounterEasterEggLabel } from "../helpers/roundCounterEasterEgg";
@@ -35,6 +36,7 @@ type QuizScreenProps = {
   onReveal: () => void;
   onConfirmQuiz: () => void;
   onNextRound: () => void;
+  controlsSlot?: ReactNode;
 };
 
 export const QuizScreen = memo(function QuizScreen(props: QuizScreenProps) {
@@ -62,6 +64,7 @@ export const QuizScreen = memo(function QuizScreen(props: QuizScreenProps) {
     onReveal,
     onConfirmQuiz,
     onNextRound,
+    controlsSlot,
   } = props;
 
   const revealVisible = roundState === "reveal";
@@ -136,16 +139,18 @@ export const QuizScreen = memo(function QuizScreen(props: QuizScreenProps) {
           </div>
         </div>
       </div>
-      <Controls
-        roundState={roundState}
-        gameMode={gameMode}
-        quizUiVariant={quizUiVariant}
-        selectedQuizIndex={selectedQuizIndex}
-        onReplaySnippet={onReplaySnippet}
-        onReveal={onReveal}
-        onConfirmQuiz={onConfirmQuiz}
-        onNextRound={onNextRound}
-      />
+      {controlsSlot ?? (
+        <Controls
+          roundState={roundState}
+          gameMode={gameMode}
+          quizUiVariant={quizUiVariant}
+          selectedQuizIndex={selectedQuizIndex}
+          onReplaySnippet={onReplaySnippet}
+          onReveal={onReveal}
+          onConfirmQuiz={onConfirmQuiz}
+          onNextRound={onNextRound}
+        />
+      )}
     </div>
   );
 });

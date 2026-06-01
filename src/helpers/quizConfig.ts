@@ -1,8 +1,7 @@
-/**
- * Сколько раундов играть за одну сессию (из пула не скрытых в `rounds.ts`).
- * Заглушка до UI выбора длины (например 10 / 25 / 50).
- */
+/** Сколько раундов играть за одну сессию викторины. */
 export const DEFAULT_QUIZ_SESSION_LENGTH = 14;
+/** Сколько однострочных раундов играть за одну сессию фристайла. */
+export const FREESTYLE_SESSION_LENGTH = 8;
 
 /** Базовый URL статики (`import.meta.env.BASE_URL` из Vite). */
 const BASE = `${(import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/")}`;

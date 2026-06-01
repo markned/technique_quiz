@@ -10,15 +10,33 @@ import { ExitConfirmDialog } from "./components/ExitConfirmDialog";
 import { RestartConfirmDialog } from "./components/RestartConfirmDialog";
 import { RulesOverlay } from "./components/RulesOverlay";
 import { RulesScreen } from "./components/RulesScreen";
+import { StartChoiceScreen } from "./components/StartChoiceScreen";
 import { StartScreen } from "./components/StartScreen";
 import { TransitionOverlay } from "./components/TransitionOverlay";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { MasterVolumeControl } from "./components/MasterVolumeControl";
 import { getGuessSeconds } from "./helpers/quizConfig";
 import { useQuizGame } from "./hooks/useQuizGame";
+import { MultiplayerHostApp, MultiplayerPlayerApp } from "./multiplayer/MultiplayerApps";
+import { createHostRoomUrl, parseAppRoute } from "./multiplayer/routes";
 
-export default function App() {
+function LocalGameApp({
+  quizOnly = false,
+  autoStart = false,
+  onExitToHome,
+}: {
+  quizOnly?: boolean;
+  autoStart?: boolean;
+  onExitToHome?: () => void;
+}) {
   const game = useQuizGame();
+
+  useEffect(() => {
+    if (!autoStart || game.previewLoading) return;
+    if (game.roundState === "intro" && !game.isStartCinematic) {
+      game.startQuiz();
+    }
+  }, [autoStart, game]);
 
   let content: ReactNode;
 
@@ -39,7 +57,12 @@ export default function App() {
       );
     }
   } else if (game.roundState === "game_rules") {
-    content = <GameRulesScreen onComplete={game.skipGameRulesToModeSelect} />;
+    content = (
+      <GameRulesScreen
+        rulesScope={quizOnly ? "quiz" : "common"}
+        onComplete={quizOnly ? () => game.selectGameMode("quiz") : game.skipGameRulesToModeSelect}
+      />
+    );
   } else if (game.roundState === "mode_select") {
     content = (
       <ModeSelectScreen onSelectMode={game.selectGameMode} quizEligibleCount={game.quiz.eligibleCount} />
@@ -56,8 +79,18 @@ export default function App() {
       <OutroScreen
         videoSrc={game.outroVideoSrc}
         subtitle={subtitle}
-        onBackToModeSelect={game.returnToModeSelect}
-        onExitToStart={game.exitToStartScreen}
+        onBackToModeSelect={
+          quizOnly
+            ? () => {
+                game.exitToStartScreen();
+                onExitToHome?.();
+              }
+            : game.returnToModeSelect
+        }
+        onExitToStart={() => {
+          game.exitToStartScreen();
+          onExitToHome?.();
+        }}
       />
     );
   } else if (!game.round) {
@@ -126,7 +159,12 @@ export default function App() {
           onCancel={() => game.overlay.setShowRestartConfirm(false)}
           onConfirm={() => {
             game.overlay.setShowRestartConfirm(false);
-            game.returnToModeSelect();
+            if (quizOnly) {
+              game.exitToStartScreen();
+              onExitToHome?.();
+            } else {
+              game.returnToModeSelect();
+            }
           }}
         />
         <ExitConfirmDialog
@@ -135,10 +173,12 @@ export default function App() {
           onConfirm={() => {
             game.overlay.setShowExitConfirm(false);
             game.exitToStartScreen();
+            onExitToHome?.();
           }}
         />
         <RulesOverlay
           open={game.overlay.showRulesOverlay}
+          gameMode={game.gameMode}
           onClose={() => game.overlay.setShowRulesOverlay(false)}
         />
         <TransitionOverlay
@@ -155,4 +195,45 @@ export default function App() {
       {content}
     </>
   );
+}
+
+function HomeApp() {
+  const [singleplayer, setSingleplayer] = useState(false);
+  if (singleplayer) {
+    return <LocalGameApp quizOnly autoStart onExitToHome={() => setSingleplayer(false)} />;
+  }
+  return (
+    <>
+      <MasterVolumeControl />
+      <main className="app-shell app-shell-start">
+        <StartChoiceScreen
+          onSingleplayer={() => setSingleplayer(true)}
+          onMultiplayer={() => {
+            window.location.href = createHostRoomUrl();
+          }}
+        />
+      </main>
+    </>
+  );
+}
+
+function isPreviewRoute(): boolean {
+  return new URLSearchParams(window.location.search).get("preview") === "1";
+}
+
+export default function App() {
+  const route = useMemo(() => parseAppRoute(), []);
+  if (isPreviewRoute()) return <LocalGameApp />;
+  if (route.kind === "host") {
+    return (
+      <>
+        <MasterVolumeControl />
+        <MultiplayerHostApp code={route.code} />
+      </>
+    );
+  }
+  if (route.kind === "player") {
+    return <MultiplayerPlayerApp code={route.code} />;
+  }
+  return <HomeApp />;
 }

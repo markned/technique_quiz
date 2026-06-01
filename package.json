@@ -3,26 +3,35 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node -e \"import('node:fs').then(fs => fs.copyFileSync('dist/index.html', 'dist/404.html'))\"",
     "preview": "vite preview",
     "lint": "eslint src",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "party:dev": "partykit dev",
+    "party:deploy": "partykit deploy",
     "deploy": "npm run build && npx gh-pages -d dist",
     "transcode:media": "node scripts/transcode-media.mjs",
     "normalize:video-loudness": "node scripts/normalize-quiz-ui-video-loudness.mjs"
   },
   "dependencies": {
     "framer-motion": "^11.18.2",
+    "partysocket": "^1.1.19",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.42.1",
     "@types/node": "^25.5.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
@@ -31,6 +40,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",
     "music-metadata": "^11.12.3",
+    "partykit": "^0.0.115",
     "prettier": "^3.8.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.59.0",

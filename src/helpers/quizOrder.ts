@@ -1,10 +1,15 @@
 import type { Round } from "../types";
-import { DEFAULT_QUIZ_SESSION_LENGTH } from "./quizConfig";
+import { DEFAULT_QUIZ_SESSION_LENGTH, FREESTYLE_SESSION_LENGTH } from "./quizConfig";
 import { reorderNoConsecutiveSameTitle, shuffle } from "./shuffle";
 
 /** Ответ из нескольких строк (для «сложного» хвоста сессии). */
 export function isMultiLineRevealRound(r: Round): boolean {
   return r.revealLineIds.length >= 2;
+}
+
+/** Ответ из одной строки — единственный допустимый тип раунда для фристайла. */
+export function isSingleLineRevealRound(r: Round): boolean {
+  return r.revealLineIds.length === 1;
 }
 
 /** Последние N раундов сессии — только многострочный ответ. */
@@ -43,6 +48,13 @@ export function buildSessionPlayOrder(visible: Round[]): Round[] {
   const tail = rotateUntilDifferentFromLast(head, shuffle([...tailPick]));
 
   return [...head, ...tail];
+}
+
+export function buildFreestyleSessionPlayOrder(visible: Round[]): Round[] {
+  return shuffleWithinDifficultyBuckets(visible.filter(isSingleLineRevealRound)).slice(
+    0,
+    FREESTYLE_SESSION_LENGTH,
+  );
 }
 
 /**
