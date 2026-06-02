@@ -38,6 +38,14 @@ export function scoreQuizAnswer(
   );
 }
 
+export function canVoteForSubmission(
+  voterPlayerId: string,
+  submissionId: string,
+  availableSubmissionIds: readonly string[],
+): boolean {
+  return submissionId !== voterPlayerId && availableSubmissionIds.includes(submissionId);
+}
+
 export type IdentityState = {
   clientId: string | null;
   hostTokensByRoom: Record<string, string>;

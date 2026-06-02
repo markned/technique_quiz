@@ -6,13 +6,10 @@ import { useGesturePauseLayout } from "./useGesturePauseLayout";
 import { useOverlayState } from "./useOverlayState";
 import { useQuizRoundState } from "./useQuizRoundState";
 import { pickLyricLines } from "../helpers/lyrics";
-import { getYouTubeEmbedUrl, toLocalMediaUrl } from "../helpers/media";
+import { toLocalMediaUrl } from "../helpers/media";
 import { buildQuizEligiblePool, buildQuizSessionPlayOrder } from "../helpers/quizMode";
 import { buildFreestyleSessionPlayOrder, buildSessionPlayOrder } from "../helpers/quizOrder";
-import { buildBackgroundPhotoSequence } from "../helpers/backgroundPhotos";
 import {
-  assetUrl,
-  assetUrlVideoRelative,
   getGuessSeconds,
   OUTRO_QUIZ_VIDEOS,
   OUTRO_VIDEO_PATH,
@@ -23,12 +20,12 @@ import {
   fragmentStopTimeSec,
   TRANSITION_FADE_MS,
 } from "../helpers/quizConfig";
-import { BACKGROUND_PHOTO_FILENAMES } from "virtual:background-photos";
 import {
   preRollSeekAndFadeInMs,
   transitionOverlayTitle,
   visibleHintCountAtTime,
 } from "../helpers/quizPlayback";
+import { buildRoundPhotoFilenameSequence, resolveRoundBackgroundSources } from "../helpers/roundBackground";
 import { createAccurateCountdown, fadeInVolume, fadeOutVolume } from "../helpers/timing";
 import {
   playQuizAnswerFeedbackSound,
@@ -55,7 +52,7 @@ function tryParseInlinePreviewRound(): Round | null {
   return parsePreviewRoundFromSession();
 }
 
-export function useQuizGame() {
+export function useQuizGame(options: { initialRoundState?: RoundState } = {}) {
   const { previewRound, previewLoading } = useInitialPreviewRound();
   const isPreviewModeRef = useRef(!!previewRound);
   isPreviewModeRef.current = !!previewRound;
@@ -93,7 +90,7 @@ export function useQuizGame() {
   } = useQuizRoundState();
 
   const [roundState, setRoundState] = useState<RoundState>(() =>
-    tryParseInlinePreviewRound() ? "transition" : "intro",
+    tryParseInlinePreviewRound() ? "transition" : (options.initialRoundState ?? "intro"),
   );
   const [roundIndex, setRoundIndex] = useState(0);
   const [timerSeconds, setTimerSeconds] = useState(() =>
@@ -171,27 +168,16 @@ export function useQuizGame() {
   roundIndexRef.current = roundIndex;
 
   const randomPhotoSequence = useMemo(
-    () => buildBackgroundPhotoSequence(orderedRounds.length, BACKGROUND_PHOTO_FILENAMES),
+    () => buildRoundPhotoFilenameSequence(orderedRounds.length),
     [orderedRounds],
   );
 
   const round = orderedRounds[roundIndex];
-  const roundVideoBackgroundUrl = round?.backgroundVideo
-    ? assetUrlVideoRelative(round.backgroundVideo.file)
-    : null;
-  const roundVideoBackgroundStart = round?.backgroundVideo?.start ?? 0;
-  const roundYoutubeBackgroundEmbed =
-    round?.backgroundVideo || !round?.backgroundYoutube
-      ? null
-      : getYouTubeEmbedUrl(round.backgroundYoutube.url, round.backgroundYoutube.start, {
-          muted: true,
-          controls: false,
-          loop: true,
-        });
-  const roundPhotoBackground =
-    round && randomPhotoSequence[roundIndex]
-      ? assetUrl(`/content/photos/${randomPhotoSequence[roundIndex]}`)
-      : null;
+  const roundBackground = resolveRoundBackgroundSources(round, randomPhotoSequence[roundIndex]);
+  const roundVideoBackgroundUrl = roundBackground.videoSrc;
+  const roundVideoBackgroundStart = roundBackground.videoStartSec;
+  const roundYoutubeBackgroundEmbed = roundBackground.youtubeSrc;
+  const roundPhotoBackground = roundBackground.photoUrl;
 
   const hintLines = useMemo(() => (round ? pickLyricLines(round.lyrics, round.hintLineIds) : []), [round]);
   const revealLines = useMemo(

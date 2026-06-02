@@ -19,7 +19,7 @@ import {
   type QuizRoundResult,
   type ServerMessage,
 } from "../src/multiplayer/types";
-import { buildLeaderboard, scoreQuizAnswer } from "../src/multiplayer/scoring";
+import { buildLeaderboard, canVoteForSubmission, scoreQuizAnswer } from "../src/multiplayer/scoring";
 import { buildMultiplayerRoundOrder, buildQuizRoundPayload, roundById } from "../src/multiplayer/rounds";
 import { compareAnswerSimilarity } from "../src/multiplayer/similarity";
 import { revealAnswerText } from "../src/helpers/quizOptions";
@@ -252,7 +252,7 @@ export default class TechniqueQuizRoom implements Party.Server {
         this.sendError(connection, "bad_phase", "Mode select can only start from the lobby.");
         return;
       }
-      if (orderedPlayers(this.state).length < MIN_PLAYERS) {
+      if (activePlayers(this.state).length < MIN_PLAYERS) {
         this.sendError(connection, "bad_phase", `At least ${MIN_PLAYERS} players are required.`);
         return;
       }
@@ -363,7 +363,7 @@ export default class TechniqueQuizRoom implements Party.Server {
         this.sendError(connection, "self_vote", "Players cannot vote for their own answer.");
         return;
       }
-      if (!this.state.freestyle.submissions[message.submissionId]) {
+      if (!canVoteForSubmission(playerId, message.submissionId, Object.keys(this.state.freestyle.submissions))) {
         this.sendError(connection, "unknown_submission", "That submission does not exist.");
         return;
       }
@@ -698,6 +698,7 @@ export default class TechniqueQuizRoom implements Party.Server {
       upcomingRoundTitle: this.state.upcomingRoundTitle,
       deadlineAt: this.state.deadlineAt,
       transitionUntil: this.state.transitionUntil,
+      nextAdvanceAt: this.state.nextAdvanceAt,
       quiz: this.state.quiz
         ? {
             variant: this.state.quiz.variant,

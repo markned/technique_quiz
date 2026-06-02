@@ -10,33 +10,27 @@ import { ExitConfirmDialog } from "./components/ExitConfirmDialog";
 import { RestartConfirmDialog } from "./components/RestartConfirmDialog";
 import { RulesOverlay } from "./components/RulesOverlay";
 import { RulesScreen } from "./components/RulesScreen";
-import { StartChoiceScreen } from "./components/StartChoiceScreen";
+import { MainModeChoiceScreen } from "./components/MainModeChoiceScreen";
 import { StartScreen } from "./components/StartScreen";
 import { TransitionOverlay } from "./components/TransitionOverlay";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { MasterVolumeControl } from "./components/MasterVolumeControl";
 import { getGuessSeconds } from "./helpers/quizConfig";
 import { useQuizGame } from "./hooks/useQuizGame";
 import { MultiplayerHostApp, MultiplayerPlayerApp } from "./multiplayer/MultiplayerApps";
-import { createHostRoomUrl, parseAppRoute } from "./multiplayer/routes";
+import { MultiplayerEntryScreen } from "./multiplayer/MultiplayerEntryScreen";
+import { parseAppRoute } from "./multiplayer/routes";
 
 function LocalGameApp({
   quizOnly = false,
-  autoStart = false,
   onExitToHome,
+  initialRoundState,
 }: {
   quizOnly?: boolean;
-  autoStart?: boolean;
   onExitToHome?: () => void;
+  initialRoundState?: "intro" | "game_rules";
 }) {
-  const game = useQuizGame();
-
-  useEffect(() => {
-    if (!autoStart || game.previewLoading) return;
-    if (game.roundState === "intro" && !game.isStartCinematic) {
-      game.startQuiz();
-    }
-  }, [autoStart, game]);
+  const game = useQuizGame({ initialRoundState });
 
   let content: ReactNode;
 
@@ -198,20 +192,47 @@ function LocalGameApp({
 }
 
 function HomeApp() {
-  const [singleplayer, setSingleplayer] = useState(false);
-  if (singleplayer) {
-    return <LocalGameApp quizOnly autoStart onExitToHome={() => setSingleplayer(false)} />;
+  const [stage, setStage] = useState<"start" | "intro" | "main_mode_choice" | "singleplayer" | "multiplayer">(
+    "start",
+  );
+  if (stage === "intro") {
+    return (
+      <>
+        <MasterVolumeControl />
+        <IntroScreen
+          onVideoEnded={() => setStage("main_mode_choice")}
+          onSkip={() => setStage("main_mode_choice")}
+        />
+      </>
+    );
+  }
+  if (stage === "main_mode_choice") {
+    return (
+      <>
+        <MasterVolumeControl />
+        <MainModeChoiceScreen
+          onSingleplayer={() => setStage("singleplayer")}
+          onMultiplayer={() => setStage("multiplayer")}
+        />
+      </>
+    );
+  }
+  if (stage === "singleplayer") {
+    return <LocalGameApp quizOnly initialRoundState="game_rules" onExitToHome={() => setStage("start")} />;
+  }
+  if (stage === "multiplayer") {
+    return (
+      <>
+        <MasterVolumeControl />
+        <MultiplayerEntryScreen />
+      </>
+    );
   }
   return (
     <>
       <MasterVolumeControl />
       <main className="app-shell app-shell-start">
-        <StartChoiceScreen
-          onSingleplayer={() => setSingleplayer(true)}
-          onMultiplayer={() => {
-            window.location.href = createHostRoomUrl();
-          }}
-        />
+        <StartScreen onStart={() => setStage("intro")} />
       </main>
     </>
   );

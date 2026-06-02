@@ -9,6 +9,7 @@ type GameRulesScreenProps = {
 
 /** Общие правила — до выбора режима */
 export function GameRulesScreen({ onComplete, rulesScope = "common" }: GameRulesScreenProps) {
+  const actionLabel = rulesScope === "common" ? "К выбору режима" : "К управлению";
   return (
     <main className="app-shell rules-screen-shell">
       <RulesCard
@@ -22,7 +23,7 @@ export function GameRulesScreen({ onComplete, rulesScope = "common" }: GameRules
               type="button"
               className="rules-screen-start-btn"
               onClick={onComplete}
-              aria-label="К выбору режима"
+              aria-label={actionLabel}
             >
               →
             </button>

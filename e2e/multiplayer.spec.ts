@@ -11,7 +11,9 @@ async function joinPlayer(browser: Browser, code: string, name: string): Promise
   await page.goto(`/join/${code}`);
   await page.getByLabel("Имя").fill(name);
   await page.getByRole("button", { name: "Играть" }).click();
-  await expect(page.getByRole("heading", { name: /Ждём ведущий экран|Восстанавливаем сессию/ })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Ждём ведущий экран|Восстанавливаем сессию/ }),
+  ).toBeVisible();
   return page;
 }
 
@@ -19,6 +21,7 @@ async function setupRoom(browser: Browser, code: string) {
   const host = await browser.newPage();
   await host.goto(`/room/${code}/host`);
   await expect(host.getByRole("heading", { name: code })).toBeVisible();
+  await expect(host.getByRole("button", { name: "К выбору режима" })).toBeDisabled();
   const alice = await joinPlayer(browser, code, "Alice");
   const bob = await joinPlayer(browser, code, "Bob");
   const cara = await joinPlayer(browser, code, "Cara");
@@ -27,6 +30,14 @@ async function setupRoom(browser: Browser, code: string) {
   await expect(host.getByText("Cara")).toBeVisible();
   await host.getByRole("button", { name: "К выбору режима" }).click();
   return { host, alice, bob, cara };
+}
+
+async function openMainModeChoice(page: Page) {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Начать" }).click();
+  await page.getByRole("button", { name: "Пропустить интро" }).click();
+  await expect(page.getByRole("button", { name: "Один игрок" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Мультиплеер" })).toBeVisible();
 }
 
 async function clickWrongMc(page: Page, correctPattern: RegExp): Promise<string> {
@@ -42,7 +53,62 @@ async function clickWrongMc(page: Page, correctPattern: RegExp): Promise<string>
   throw new Error("No wrong multiple-choice option was available");
 }
 
-test("multiplayer quiz supports joining, answering, scoring, leaderboard, and reconnect", async ({ browser }) => {
+test("initial home screen keeps one start button and no mode choices", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Начать" })).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: /Один игрок|Мультиплеер|Singleplayer|Multiplayer/ }),
+  ).toHaveCount(0);
+});
+
+test("intro skip opens main singleplayer/multiplayer choice", async ({ page }) => {
+  await openMainModeChoice(page);
+});
+
+test("singleplayer starts quiz-only rules flow", async ({ page }) => {
+  await openMainModeChoice(page);
+  await page.getByRole("button", { name: "Один игрок" }).click();
+  await expect(page.getByRole("heading", { name: "Об игре" })).toBeVisible();
+  await expect(page.getByText("Фристайл")).toHaveCount(0);
+  await page.getByRole("button", { name: "К управлению" }).click();
+  await expect(page.getByRole("heading", { name: "Управление" })).toBeVisible();
+  await expect(page.getByText("Выбор режима")).toHaveCount(0);
+});
+
+test("multiplayer entry supports create room and manual join by code", async ({ browser, page }) => {
+  await openMainModeChoice(page);
+  await page.getByRole("button", { name: "Мультиплеер" }).click();
+  await expect(page.getByRole("button", { name: "Создать комнату" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Войти по коду" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Создать комнату" }).click();
+  await expect(page).toHaveURL(/\/room\/[A-Z0-9]{6}\/host/);
+  const code = page.url().match(/\/room\/([A-Z0-9]{6})\/host/)?.[1];
+  if (!code) throw new Error("Create room did not navigate to a host room");
+  await expect(page.getByRole("heading", { name: code })).toBeVisible();
+
+  const player = await browser.newPage();
+  await openMainModeChoice(player);
+  await player.getByRole("button", { name: "Мультиплеер" }).click();
+  await player.getByLabel("Код комнаты").fill(code.toLowerCase());
+  await player.getByRole("button", { name: "Войти по коду" }).click();
+  await expect(player).toHaveURL(new RegExp(`/join/${code}$`));
+  await player.getByLabel("Имя").fill("Manual");
+  await player.getByRole("button", { name: "Играть" }).click();
+  await expect(player.getByText(/Ждём ведущий экран|Восстанавливаем сессию/).first()).toBeVisible();
+  await expect(page.getByText("Manual")).toBeVisible();
+
+  const directPlayer = await browser.newPage();
+  await directPlayer.goto(`/room/${code}/player`);
+  await directPlayer.getByLabel("Имя").fill("Direct");
+  await directPlayer.getByRole("button", { name: "Играть" }).click();
+  await expect(directPlayer.getByText(/Ждём ведущий экран|Восстанавливаем сессию/).first()).toBeVisible();
+  await expect(page.getByText("Direct")).toBeVisible();
+});
+
+test("multiplayer quiz supports joining, answering, scoring, leaderboard, and reconnect", async ({
+  browser,
+}) => {
   const code = e2eRoomCode("Q");
   const { host, alice, bob, cara } = await setupRoom(browser, code);
 
@@ -58,14 +124,26 @@ test("multiplayer quiz supports joining, answering, scoring, leaderboard, and re
   await expect(host.getByText("Верно: 1")).toBeVisible({ timeout: 15_000 });
   await expect(host.locator(".multiplayer-leaderboard").getByText("Alice")).toBeVisible();
   await host.reload();
-  await expect(host.getByText(/Сессия восстановлена|Верно: 1|Alice/).first()).toBeVisible({ timeout: 15_000 });
+  await expect(host.getByText(/Сессия восстановлена|Верно: 1|Alice/).first()).toBeVisible({
+    timeout: 15_000,
+  });
   await alice.reload();
   await expect(
-    alice.getByText(/Сессия восстановлена|Результаты на экране|Ждём ведущий экран|Выбери ответ|Собери порядок/).first(),
+    alice
+      .getByText(/Сессия восстановлена|Результаты на экране|Ждём ведущий экран|Выбери ответ|Собери порядок/)
+      .first(),
   ).toBeVisible({ timeout: 15_000 });
+  await expect(host.getByRole("heading", { name: "Победители" })).toBeVisible({ timeout: 35_000 });
+  await expect(host.getByText("Alice")).toBeVisible();
+  await host.getByRole("button", { name: "Сыграть ещё" }).click();
+  await expect(host.getByText(/Слушаем фрагмент|Следующий раунд|1\/3/).first()).toBeVisible({
+    timeout: 15_000,
+  });
 });
 
-test("multiplayer freestyle supports anonymous voting, original reveal, similarity bonus, and leaderboard", async ({ browser }) => {
+test("multiplayer freestyle supports anonymous voting, original reveal, similarity bonus, and leaderboard", async ({
+  browser,
+}) => {
   const code = e2eRoomCode("F");
   const { host, alice, bob, cara } = await setupRoom(browser, code);
 

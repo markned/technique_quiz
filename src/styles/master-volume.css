@@ -6,8 +6,8 @@
 @media (min-width: 901px) {
   .master-volume-dock {
     --mv-icon: 48px;
-    --mv-track-active: #6eb0f5;
-    --mv-track-idle: #2c3038;
+    --mv-track-active: var(--accent-strong);
+    --mv-track-idle: rgba(255, 255, 255, 0.14);
     display: block;
     position: fixed;
     left: 0;
@@ -25,7 +25,7 @@
     pointer-events: auto;
     width: max-content;
     transition: transform 0.28s cubic-bezier(0.33, 1, 0.68, 1);
-    filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.4));
+    filter: drop-shadow(0 8px 26px rgba(0, 0, 0, 0.48));
     /* Спрятана панель с ползунком, видна только кнопка-иконка у левого края */
     transform: translateX(calc(-100% + var(--mv-icon)));
   }
@@ -42,10 +42,10 @@
     padding: 14px 12px 14px 16px;
     min-width: 4.5rem;
     min-height: min(168px, 30vh);
-    background: rgba(12, 16, 28, 0.55);
+    background: rgba(10, 13, 20, 0.72);
     border: 1px solid rgba(158, 180, 227, 0.22);
     border-right: none;
-    border-radius: 14px 0 0 14px;
+    border-radius: 16px 0 0 16px;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
@@ -61,18 +61,19 @@
     align-items: center;
     justify-content: center;
     border: 1px solid rgba(158, 180, 227, 0.28);
-    border-radius: 0 14px 14px 0;
-    background: rgba(18, 22, 36, 0.72);
+    border-radius: 0 16px 16px 0;
+    background: rgba(18, 26, 43, 0.82);
     color: #f0f4ff;
     cursor: pointer;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     -webkit-tap-highlight-color: transparent;
-    opacity: 0.2;
+    opacity: 0.34;
     transition:
       opacity 0.45s ease,
       background 0.22s ease,
-      border-color 0.22s ease;
+      border-color 0.22s ease,
+      box-shadow 0.22s ease;
   }
 
   .master-volume-dock:hover .master-volume-icon-btn,
@@ -82,7 +83,8 @@
 
   .master-volume-dock:hover .master-volume-icon-btn:hover,
   .master-volume-dock:focus-within .master-volume-icon-btn:hover {
-    background: rgba(26, 32, 52, 0.85);
+    background: rgba(26, 36, 60, 0.92);
+    box-shadow: inset 0 0 0 1px rgba(122, 163, 255, 0.28);
   }
 
   .master-volume-icon-btn:focus-visible {
@@ -104,13 +106,13 @@
     margin: 0;
     cursor: pointer;
     background: transparent;
-    accent-color: #ffffff;
+    accent-color: var(--accent-strong);
     -webkit-appearance: slider-vertical;
     appearance: slider-vertical;
   }
 
   .master-volume-slider::-webkit-slider-runnable-track {
-    width: 7px;
+    width: 8px;
     height: 100%;
     margin: 0;
     border-radius: 999px;
@@ -132,12 +134,14 @@
     margin-left: -5px;
     border-radius: 999px;
     background: #ffffff;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
-    border: none;
+    box-shadow:
+      0 1px 4px rgba(0, 0, 0, 0.45),
+      0 0 16px rgba(91, 140, 255, 0.42);
+    border: 2px solid rgba(122, 163, 255, 0.78);
   }
 
   .master-volume-slider::-moz-range-track {
-    width: 7px;
+    width: 8px;
     height: 100%;
     border-radius: 999px;
     background: linear-gradient(
@@ -153,10 +157,12 @@
   .master-volume-slider::-moz-range-thumb {
     width: 18px;
     height: 26px;
-    border: none;
+    border: 2px solid rgba(122, 163, 255, 0.78);
     border-radius: 999px;
     background: #ffffff;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+    box-shadow:
+      0 1px 4px rgba(0, 0, 0, 0.45),
+      0 0 16px rgba(91, 140, 255, 0.42);
   }
 
   @supports not (appearance: slider-vertical) {

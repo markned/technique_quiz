@@ -122,6 +122,7 @@ export type PublicRoomState = {
   upcomingRoundTitle: string | null;
   deadlineAt: number | null;
   transitionUntil: number | null;
+  nextAdvanceAt: number | null;
   quiz: PublicQuizState | null;
   freestyle: PublicFreestyleState | null;
   roundResult: PublicRoundResult | null;

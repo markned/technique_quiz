@@ -1,9 +1,9 @@
-import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ClientMessage } from "./messages";
 import type { LeaderboardRow, PublicRoomState, RoomCode } from "./types";
 import { usePartyRoom } from "./usePartyRoom";
-import { getSavedPlayerName, rememberPlayerName } from "./identity";
-import { publicJoinUrl } from "./routes";
+import { getSavedPlayerName, normalizeRoomCode, rememberPlayerName } from "./identity";
+import { playerPath, publicJoinUrl } from "./routes";
 import { roundById } from "./rounds";
 import { buildQuizEligiblePool } from "../helpers/quizMode";
 import { visibleRoundsForSession } from "../helpers/sessionRounds";
@@ -20,6 +20,7 @@ import { ModeSelectScreen } from "../components/ModeSelectScreen";
 import { RulesScreen } from "../components/RulesScreen";
 import { QuizScreen } from "../components/QuizScreen";
 import { TransitionOverlay } from "../components/TransitionOverlay";
+import { buildRoundPhotoFilenameSequence, resolveRoundBackgroundSources } from "../helpers/roundBackground";
 
 function StatusLine({ status, error }: { status: string; error: string | null }) {
   if (error) return <p className="multiplayer-status multiplayer-status--error">{error}</p>;
@@ -37,21 +38,95 @@ function RestoredToast({ visible }: { visible: boolean }) {
   ) : null;
 }
 
-function Leaderboard({ rows, title = "Таблица" }: { rows: LeaderboardRow[]; title?: string }) {
+function InvalidRoomCodeScreen({ code }: { code: RoomCode }) {
   return (
-    <section className="multiplayer-panel multiplayer-leaderboard" aria-label={title}>
+    <main className="app-shell multiplayer-shell">
+      <section className="multiplayer-panel multiplayer-controller-card">
+        <p className="multiplayer-eyebrow">Комната</p>
+        <h1>Неверный код</h1>
+        <p className="multiplayer-status multiplayer-status--error" role="alert">
+          Код «{code || "—"}» не похож на 6-символьный код комнаты.
+        </p>
+        <button
+          type="button"
+          className="btn btn-primary btn-hero"
+          onClick={() => (window.location.href = "/")}
+        >
+          На старт
+        </button>
+      </section>
+    </main>
+  );
+}
+
+function useSecondsUntil(targetAt: number | null | undefined): number | null {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!targetAt) return undefined;
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+
+    function tick() {
+      setNow(Date.now());
+    }
+  }, [targetAt]);
+
+  return targetAt ? Math.max(0, Math.ceil((targetAt - now) / 1_000)) : null;
+}
+
+function CountdownPill({ label, targetAt }: { label: string; targetAt: number | null | undefined }) {
+  const seconds = useSecondsUntil(targetAt);
+  if (seconds === null) return null;
+  return (
+    <p className="multiplayer-countdown" aria-live="polite">
+      {label}: {seconds}
+    </p>
+  );
+}
+
+function Leaderboard({
+  rows,
+  title = "Таблица",
+  finale = false,
+}: {
+  rows: LeaderboardRow[];
+  title?: string;
+  finale?: boolean;
+}) {
+  return (
+    <section
+      className={`multiplayer-leaderboard ${finale ? "multiplayer-leaderboard--finale" : ""}`}
+      aria-label={title}
+    >
       <h2>{title}</h2>
       <ol>
         {rows.map((row) => (
           <li key={row.playerId} className={!row.connected ? "is-disconnected" : ""}>
-            <span>
+            <span className="multiplayer-leaderboard-name">
               {row.rank}. {row.name}
             </span>
-            <strong>{row.score}</strong>
+            <strong>{row.score} очк.</strong>
           </li>
         ))}
       </ol>
     </section>
+  );
+}
+
+function PlayerRoster({ state }: { state: PublicRoomState }) {
+  return (
+    <div className="multiplayer-player-grid" aria-label="Игроки">
+      {state.players.map((player) => (
+        <span
+          key={player.id}
+          className={`lyric-line genius-bar ${player.connected ? "" : "is-disconnected"}`}
+        >
+          <strong>{player.name}</strong>
+          <small>{player.connected ? "online" : "reconnect"}</small>
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -68,23 +143,23 @@ function HostLobby({
   status: string;
   error: string | null;
 }) {
-  const canStart = state.players.length >= state.minPlayers;
+  const connectedCount = state.players.filter((player) => player.connected).length;
+  const canStart = connectedCount >= state.minPlayers;
   return (
-    <main className="app-shell multiplayer-shell">
+    <main className="app-shell multiplayer-shell multiplayer-lobby-shell">
       <section className="multiplayer-panel multiplayer-lobby">
         <StatusLine status={status} error={error} />
-        <p className="multiplayer-eyebrow">Комната</p>
+        <p className="multiplayer-eyebrow">Игроки заходят по коду</p>
         <h1 className="multiplayer-room-code">{code}</h1>
-        <p className="multiplayer-join-url">{publicJoinUrl(code)}</p>
-        <div className="multiplayer-player-grid">
-          {state.players.map((player) => (
-            <span key={player.id} className={player.connected ? "" : "is-disconnected"}>
-              {player.name}
-            </span>
-          ))}
+        <div className="multiplayer-join-card" aria-label="Ссылка для игроков">
+          <span>Join at</span>
+          <strong>{window.location.host}</strong>
+          <small>{publicJoinUrl(code)}</small>
         </div>
+        <PlayerRoster state={state} />
         <p className="multiplayer-muted">
-          Игроков: {state.players.length}/{state.maxPlayers}. Нужно минимум {state.minPlayers}.
+          Игроков online: {connectedCount}/{state.maxPlayers}. Нужно минимум {state.minPlayers}, максимум{" "}
+          {state.maxPlayers}.
         </p>
         <button
           type="button"
@@ -125,36 +200,103 @@ function HostDock({ state }: { state: PublicRoomState }) {
   );
 }
 
-function ResultOverlay({ state }: { state: PublicRoomState }) {
-  if (!state.roundResult && state.phase !== "finished") return null;
+function QuizResultStage({ state }: { state: PublicRoomState }) {
+  const result = state.roundResult?.kind === "quiz" ? state.roundResult : null;
+  if (!result) return null;
+  const correctIds = new Set(result.correctPlayerIds);
+  const correct = result.playerResults.filter((item) => correctIds.has(item.playerId));
+  const missed = result.playerResults.filter((item) => !correctIds.has(item.playerId));
   return (
-    <aside className="multiplayer-result-overlay">
-      {state.roundResult?.kind === "quiz" ? (
-        <section className="multiplayer-panel">
-          <h2>Ответ</h2>
-          <p className="multiplayer-result-answer">{state.roundResult.correctAnswer}</p>
-          <p className="multiplayer-muted">Верно: {state.roundResult.correctPlayerIds.length}</p>
+    <>
+      <div className="multiplayer-result-section">
+        <p className="multiplayer-eyebrow">Правильный ответ</p>
+        <p className="lyric-line genius-bar genius-reveal-line multiplayer-answer-bar">
+          {result.correctAnswer}
+        </p>
+        <p className="multiplayer-muted">Верно: {correct.length}</p>
+      </div>
+      <div className="multiplayer-result-columns">
+        <section>
+          <h3>Попали</h3>
+          <div className="multiplayer-result-bars">
+            {correct.length > 0 ? (
+              correct.map((item) => (
+                <p key={item.playerId} className="lyric-line genius-bar multiplayer-result-player is-correct">
+                  {item.name}
+                </p>
+              ))
+            ) : (
+              <p className="multiplayer-muted">В этом раунде никто.</p>
+            )}
+          </div>
         </section>
-      ) : null}
-      {state.roundResult?.kind === "freestyle" ? (
-        <section className="multiplayer-panel">
-          <h2>Оригинал</h2>
-          <p className="multiplayer-result-answer">{state.roundResult.originalAnswer}</p>
-          {state.roundResult.tieBreakNote ? (
-            <p className="multiplayer-muted">{state.roundResult.tieBreakNote}</p>
-          ) : null}
-          <div className="multiplayer-submissions-list">
-            {state.roundResult.submissions.map((submission) => (
-              <p key={submission.playerId}>
-                <strong>{submission.name}</strong>: {submission.text} · голосов {submission.votes}
-                {submission.votingWinner ? " · победитель" : ""}
-                {submission.similarityBonus ? " · +1 похожесть" : ""}
+        <section>
+          <h3>Мимо / нет ответа</h3>
+          <div className="multiplayer-result-bars">
+            {missed.map((item) => (
+              <p key={item.playerId} className="lyric-line genius-bar multiplayer-result-player is-missed">
+                {item.name}
+                <small>{item.answerLabel}</small>
               </p>
             ))}
           </div>
         </section>
-      ) : null}
-      <Leaderboard rows={state.leaderboard} />
+      </div>
+    </>
+  );
+}
+
+function FreestyleResultStage({ state }: { state: PublicRoomState }) {
+  const result = state.roundResult?.kind === "freestyle" ? state.roundResult : null;
+  if (!result) return null;
+  return (
+    <>
+      <div className="multiplayer-result-section">
+        <p className="multiplayer-eyebrow">Оригинальный бар</p>
+        <p className="lyric-line genius-bar genius-reveal-line multiplayer-answer-bar">
+          {result.originalAnswer}
+        </p>
+      </div>
+      <div className="multiplayer-result-section">
+        <h3>Ответы игроков</h3>
+        <div className="multiplayer-submissions-list">
+          {result.submissions.map((submission) => (
+            <article
+              key={submission.playerId}
+              className={`lyric-line genius-bar multiplayer-submission-card ${
+                submission.tieBrokenWinner ? "is-winner" : ""
+              }`}
+            >
+              <span>{submission.text}</span>
+              <small>
+                {submission.name} · голосов {submission.votes}
+                {submission.votingWinner ? " · победитель голосования" : ""}
+                {submission.similarityBonus ? " · +1 похожесть" : ""}
+              </small>
+            </article>
+          ))}
+        </div>
+        {result.tieBreakNote ? <p className="multiplayer-muted">{result.tieBreakNote}</p> : null}
+      </div>
+    </>
+  );
+}
+
+function ResultOverlay({ state }: { state: PublicRoomState }) {
+  if (!state.roundResult && state.phase !== "finished") return null;
+  if (state.phase === "finished") return null;
+  return (
+    <aside className="multiplayer-result-overlay" aria-live="polite">
+      <section className="multiplayer-result-stage">
+        <header className="multiplayer-result-header">
+          <p className="multiplayer-eyebrow">Раунд {state.currentRoundIndex + 1}</p>
+          <h2>{state.roundResult?.kind === "freestyle" ? "Итоги фристайла" : "Итоги викторины"}</h2>
+          <CountdownPill label="Следующий раунд" targetAt={state.nextAdvanceAt} />
+        </header>
+        {state.roundResult?.kind === "quiz" ? <QuizResultStage state={state} /> : null}
+        {state.roundResult?.kind === "freestyle" ? <FreestyleResultStage state={state} /> : null}
+        <Leaderboard rows={state.leaderboard} title="Лидерборд" />
+      </section>
     </aside>
   );
 }
@@ -269,6 +411,11 @@ function useHostPlayback(state: PublicRoomState | null, send: (message: ClientMe
 function HostGame({ state, send }: { state: PublicRoomState; send: (message: ClientMessage) => boolean }) {
   const round = roundById(state.currentRoundId);
   const { visibleHintLineCount, timerSeconds } = useHostPlayback(state, send);
+  const photoSequence = useMemo(
+    () => buildRoundPhotoFilenameSequence(state.totalRounds),
+    [state.totalRounds],
+  );
+  const background = resolveRoundBackgroundSources(round, photoSequence[state.currentRoundIndex]);
   if (!round) return <FinalLeaderboard state={state} send={send} />;
 
   const hintLines = pickLyricLines(round.lyrics, round.hintLineIds);
@@ -285,7 +432,12 @@ function HostGame({ state, send }: { state: PublicRoomState; send: (message: Cli
 
   return (
     <main className="app-shell app-shell-quiz">
-      <QuizBackground photoUrl={null} youtubeSrc={null} videoSrc={null} videoStartSec={0} />
+      <QuizBackground
+        photoUrl={background.photoUrl}
+        youtubeSrc={background.youtubeSrc}
+        videoSrc={background.videoSrc}
+        videoStartSec={background.videoStartSec}
+      />
       <DockChromaKeyLayer />
       <div className="app-overlay" key={state.currentRoundId ?? "none"}>
         <QuizScreen
@@ -332,9 +484,11 @@ function FinalLeaderboard({
   send: (message: ClientMessage) => boolean;
 }) {
   return (
-    <main className="app-shell multiplayer-shell">
-      <section className="multiplayer-panel multiplayer-lobby">
-        <Leaderboard rows={state.leaderboard} title="Финал" />
+    <main className="app-shell multiplayer-shell multiplayer-finale-shell">
+      <section className="multiplayer-result-stage multiplayer-finale-stage">
+        <p className="multiplayer-eyebrow">Финал</p>
+        <h1>Победители</h1>
+        <Leaderboard rows={state.leaderboard} title="Финальный лидерборд" finale />
         <button
           type="button"
           className="btn btn-primary btn-hero"
@@ -348,6 +502,11 @@ function FinalLeaderboard({
 }
 
 export function MultiplayerHostApp({ code }: { code: RoomCode }) {
+  if (code.length !== 6) return <InvalidRoomCodeScreen code={code} />;
+  return <MultiplayerHostRoom code={code} />;
+}
+
+function MultiplayerHostRoom({ code }: { code: RoomCode }) {
   const room = usePartyRoom({ code, role: "host" });
   const state = room.state;
   let content: ReactNode;
@@ -388,8 +547,19 @@ export function MultiplayerHostApp({ code }: { code: RoomCode }) {
 
 function PlayerJoin({ code, onJoin }: { code: RoomCode; onJoin: (name: string) => void }) {
   const [name, setName] = useState(getSavedPlayerName);
+  const [roomCode, setRoomCode] = useState(code);
+  const [error, setError] = useState<string | null>(code.length === 6 ? null : "Проверь код комнаты.");
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    const cleanCode = normalizeRoomCode(roomCode);
+    if (cleanCode.length !== 6) {
+      setError("Код комнаты состоит из 6 символов.");
+      return;
+    }
+    if (cleanCode !== code) {
+      window.location.href = playerPath(cleanCode);
+      return;
+    }
     const clean = name.trim();
     if (!clean) return;
     rememberPlayerName(clean);
@@ -397,13 +567,35 @@ function PlayerJoin({ code, onJoin }: { code: RoomCode; onJoin: (name: string) =
   };
   return (
     <main className="app-shell multiplayer-shell">
-      <form className="multiplayer-panel multiplayer-controller" onSubmit={submit}>
-        <p className="multiplayer-eyebrow">Комната {code}</p>
+      <form
+        className="multiplayer-panel multiplayer-controller multiplayer-controller-card"
+        onSubmit={submit}
+      >
+        <p className="multiplayer-eyebrow">Контроллер игрока</p>
         <h1>Войти в игру</h1>
+        <label className="multiplayer-field multiplayer-code-field">
+          Код комнаты
+          <input
+            value={roomCode}
+            onChange={(event) => {
+              setError(null);
+              setRoomCode(normalizeRoomCode(event.target.value));
+            }}
+            inputMode="text"
+            autoCapitalize="characters"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </label>
         <label className="multiplayer-field">
           Имя
           <input value={name} onChange={(event) => setName(event.target.value)} maxLength={24} autoFocus />
         </label>
+        {error ? (
+          <p className="multiplayer-status multiplayer-status--error" role="alert">
+            {error}
+          </p>
+        ) : null}
         <button type="submit" className="btn btn-primary btn-hero">
           Играть
         </button>
@@ -412,13 +604,33 @@ function PlayerJoin({ code, onJoin }: { code: RoomCode; onJoin: (name: string) =
   );
 }
 
-function PlayerWaiting({ state, title }: { state: PublicRoomState; title: string }) {
+function PlayerWaiting({
+  state,
+  title,
+  playerId,
+  acceptedText,
+}: {
+  state: PublicRoomState;
+  title: string;
+  playerId?: string;
+  acceptedText?: string | null;
+}) {
+  const me = playerId ? state.players.find((player) => player.id === playerId) : null;
   return (
     <main className="app-shell multiplayer-shell">
-      <section className="multiplayer-panel multiplayer-controller">
+      <section className="multiplayer-panel multiplayer-controller multiplayer-controller-card">
         <p className="multiplayer-eyebrow">Комната {state.code}</p>
         <h1>{title}</h1>
-        <p className="multiplayer-muted">Смотри на главный экран.</p>
+        {me ? (
+          <p className="lyric-line genius-bar multiplayer-controller-identity">
+            {me.name}
+            <small>{me.connected ? "подключён" : "переподключаем"}</small>
+          </p>
+        ) : null}
+        {acceptedText ? (
+          <p className="lyric-line genius-bar genius-reveal-line multiplayer-answer-bar">{acceptedText}</p>
+        ) : null}
+        <p className="multiplayer-muted">Смотри на главный экран — там музыка, таймер и результаты.</p>
         <Leaderboard rows={state.leaderboard} />
       </section>
     </main>
@@ -436,14 +648,21 @@ function PlayerQuizController({
 }) {
   const round = roundById(state.currentRoundId);
   const alreadyAnswered = state.quiz?.answeredPlayerIds.includes(playerId);
-  const [order, setOrder] = useState<number[]>(() => state.quiz?.orderLineIds ?? []);
-  useEffect(() => setOrder(state.quiz?.orderLineIds ?? []), [state.currentRoundId, state.quiz?.orderLineIds]);
-  if (!state.quiz || alreadyAnswered) return <PlayerWaiting state={state} title="Ответ принят" />;
+  const defaultOrder = state.quiz?.orderLineIds ?? [];
+  const [orderState, setOrderState] = useState<{ roundId: number | null; ids: number[] }>(() => ({
+    roundId: state.currentRoundId,
+    ids: defaultOrder,
+  }));
+  const order = orderState.roundId === state.currentRoundId ? orderState.ids : defaultOrder;
+  if (!state.quiz || alreadyAnswered)
+    return <PlayerWaiting state={state} playerId={playerId} title="Ответ принят" />;
   if (state.quiz.variant === "mc4") {
     return (
       <main className="app-shell multiplayer-shell">
-        <section className="multiplayer-panel multiplayer-controller">
+        <section className="multiplayer-panel multiplayer-controller multiplayer-controller-card">
+          <p className="multiplayer-eyebrow">Комната {state.code}</p>
           <h1>Выбери ответ</h1>
+          <CountdownPill label="Осталось" targetAt={state.deadlineAt} />
           <div className="multiplayer-answer-grid">
             {state.quiz.options.map((option, index) => (
               <button
@@ -467,16 +686,18 @@ function PlayerQuizController({
     const next = [...order];
     const [item] = next.splice(from, 1);
     next.splice(to, 0, item!);
-    setOrder(next);
+    setOrderState({ roundId: state.currentRoundId, ids: next });
   };
   return (
     <main className="app-shell multiplayer-shell">
-      <section className="multiplayer-panel multiplayer-controller">
+      <section className="multiplayer-panel multiplayer-controller multiplayer-controller-card">
+        <p className="multiplayer-eyebrow">Комната {state.code}</p>
         <h1>Собери порядок</h1>
+        <CountdownPill label="Осталось" targetAt={state.deadlineAt} />
         <ol className="multiplayer-order-list">
           {order.map((id, index) => (
             <li key={id}>
-              <span>{lineText(id)}</span>
+              <span className="lyric-line genius-bar quiz-option">{lineText(id)}</span>
               <button type="button" disabled={index === 0} onClick={() => move(index, index - 1)}>
                 ↑
               </button>
@@ -506,18 +727,37 @@ function PlayerFreestyleSubmit({
   state,
   playerId,
   send,
+  acceptedText,
+  onAcceptedText,
 }: {
   state: PublicRoomState;
   playerId: string;
   send: (message: ClientMessage) => boolean;
+  acceptedText: string | null;
+  onAcceptedText: (text: string) => void;
 }) {
+  const round = roundById(state.currentRoundId);
+  const hintLines = round ? pickLyricLines(round.lyrics, round.hintLineIds) : [];
   const [text, setText] = useState("");
   if (state.freestyle?.submittedPlayerIds.includes(playerId))
-    return <PlayerWaiting state={state} title="Ответ отправлен" />;
+    return (
+      <PlayerWaiting state={state} playerId={playerId} title="Ответ отправлен" acceptedText={acceptedText} />
+    );
   return (
     <main className="app-shell multiplayer-shell">
-      <section className="multiplayer-panel multiplayer-controller">
+      <section className="multiplayer-panel multiplayer-controller multiplayer-controller-card">
+        <p className="multiplayer-eyebrow">Комната {state.code}</p>
         <h1>Продолжи текст</h1>
+        <CountdownPill label="Осталось" targetAt={state.deadlineAt} />
+        {hintLines.length > 0 ? (
+          <div className="multiplayer-hint-bars">
+            {hintLines.map((line) => (
+              <p key={line.id} className="lyric-line genius-bar">
+                {line.text}
+              </p>
+            ))}
+          </div>
+        ) : null}
         <textarea
           className="multiplayer-textarea"
           value={text}
@@ -528,7 +768,12 @@ function PlayerFreestyleSubmit({
           type="button"
           className="btn btn-primary btn-hero"
           disabled={!text.trim()}
-          onClick={() => send({ type: "player_freestyle_submit", text })}
+          onClick={() => {
+            const clean = text.trim();
+            if (!clean) return;
+            onAcceptedText(clean);
+            send({ type: "player_freestyle_submit", text: clean });
+          }}
         >
           Отправить
         </button>
@@ -547,12 +792,15 @@ function PlayerVote({
   send: (message: ClientMessage) => boolean;
 }) {
   if (state.freestyle?.votedPlayerIds.includes(playerId))
-    return <PlayerWaiting state={state} title="Голос принят" />;
+    return <PlayerWaiting state={state} playerId={playerId} title="Голос принят" />;
   const options = (state.freestyle?.votingOptions ?? []).filter((option) => option.submissionId !== playerId);
   return (
     <main className="app-shell multiplayer-shell">
-      <section className="multiplayer-panel multiplayer-controller">
+      <section className="multiplayer-panel multiplayer-controller multiplayer-controller-card">
+        <p className="multiplayer-eyebrow">Комната {state.code}</p>
         <h1>Голосование</h1>
+        <p className="multiplayer-muted">Один голос. За свой бар голосовать нельзя.</p>
+        <CountdownPill label="Осталось" targetAt={state.deadlineAt} />
         <div className="multiplayer-answer-grid">
           {options.map((option) => (
             <button
@@ -571,16 +819,23 @@ function PlayerVote({
 }
 
 export function MultiplayerPlayerApp({ code }: { code: RoomCode }) {
+  if (code.length !== 6) return <InvalidRoomCodeScreen code={code} />;
+  return <MultiplayerPlayerRoom code={code} />;
+}
+
+function MultiplayerPlayerRoom({ code }: { code: RoomCode }) {
   const [name, setName] = useState(getSavedPlayerName);
+  const [acceptedSubmissions, setAcceptedSubmissions] = useState<Record<string, string>>({});
   const room = usePartyRoom({ code, role: "player", playerName: name, enabled: !!name });
   if (!name) return <PlayerJoin code={code} onJoin={setName} />;
   const state = room.state;
   const playerId = room.you?.playerId;
+  const submissionKey = state?.currentRoundId ? String(state.currentRoundId) : "";
   let content: ReactNode;
   if (!state || !playerId) {
     content = (
       <main className="app-shell multiplayer-shell">
-        <section className="multiplayer-panel multiplayer-controller">
+        <section className="multiplayer-panel multiplayer-controller multiplayer-controller-card">
           <StatusLine status={room.status} error={room.error} />
           <h1>Восстанавливаем сессию…</h1>
         </section>
@@ -589,15 +844,23 @@ export function MultiplayerPlayerApp({ code }: { code: RoomCode }) {
   } else if (state.phase === "quiz_answering") {
     content = <PlayerQuizController state={state} playerId={playerId} send={room.send} />;
   } else if (state.phase === "freestyle_submitting") {
-    content = <PlayerFreestyleSubmit state={state} playerId={playerId} send={room.send} />;
+    content = (
+      <PlayerFreestyleSubmit
+        state={state}
+        playerId={playerId}
+        send={room.send}
+        acceptedText={acceptedSubmissions[submissionKey] ?? null}
+        onAcceptedText={(text) => setAcceptedSubmissions((prev) => ({ ...prev, [submissionKey]: text }))}
+      />
+    );
   } else if (state.phase === "freestyle_voting") {
     content = <PlayerVote state={state} playerId={playerId} send={room.send} />;
   } else if (state.phase === "round_results") {
-    content = <PlayerWaiting state={state} title="Результаты на экране" />;
+    content = <PlayerWaiting state={state} playerId={playerId} title="Результаты на экране" />;
   } else if (state.phase === "finished") {
-    content = <PlayerWaiting state={state} title="Финал" />;
+    content = <PlayerWaiting state={state} playerId={playerId} title="Финал" />;
   } else {
-    content = <PlayerWaiting state={state} title="Ждём ведущий экран" />;
+    content = <PlayerWaiting state={state} playerId={playerId} title="Ждём ведущий экран" />;
   }
   return (
     <>

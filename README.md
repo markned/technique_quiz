@@ -109,6 +109,23 @@ VPS fallback:
 - Если выбран VPS, используйте Docker или process manager, reverse proxy с HTTPS/WSS, restart policy, healthcheck endpoint, stdout/stderr logs, log rotation, and memory alerts. Ожидаемая память для текущей комнаты мала, но держите headroom для медиа/CDN и нескольких комнат.
 - Не запускайте `partykit dev` как production service.
 
+## Post-deploy smoke checklist
+
+После деплоя проверь на реальном домене:
+
+- `/` загружается и показывает оригинальный стартовый экран с одной кнопкой.
+- Static fallback routes открывают React-приложение: `/room/E2ECHK/host`, `/join/E2ECHK`, `/room/E2ECHK/player`.
+- PartyKit endpoint отвечает по HTTPS/WSS; host не показывает ошибку подключения.
+- Host создаёт комнату через Multiplayer → Create room.
+- Player входит по direct link и через ручной ввод room code.
+- 3 телефона подключаются; кнопка продолжения активна только после минимума 3 игроков.
+- Refresh host восстанавливает ту же комнату; refresh player сохраняет имя, score и player identity.
+- Quiz mode проходит end-to-end: ответы на телефонах, reveal, round results, leaderboard.
+- Freestyle mode проходит end-to-end: submit, anonymous vote, no self-vote, original reveal, similarity bonus, leaderboard.
+- Final leaderboard появляется; restart начинает новую игру с теми же игроками и сброшенным счётом.
+- Mobile Safari и Chrome: join screen, MC buttons, order ↑↓ controls, textarea и voting работают большими touch targets.
+- Audio стартует после пользовательского жеста, intro skip ведёт к выбору Singleplayer/Multiplayer.
+
 ## Переименование репозитория на GitHub
 
 После смены имени репозитория на `technique_quiz` обнови URL у себя:

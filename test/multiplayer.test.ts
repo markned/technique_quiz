@@ -2,8 +2,19 @@ import { describe, expect, it } from "vitest";
 import { FREESTYLE_SESSION_LENGTH } from "../src/helpers/quizConfig";
 import { buildMultiplayerRoundOrder } from "../src/multiplayer/rounds";
 import { ClientMessageSchema } from "../src/multiplayer/messages";
-import { buildLeaderboard, identityReducer, scoreQuizAnswer } from "../src/multiplayer/scoring";
-import { compareAnswerSimilarity, isSimilarityBonus, normalizeAnswerText } from "../src/multiplayer/similarity";
+import {
+  buildLeaderboard,
+  canVoteForSubmission,
+  identityReducer,
+  scoreQuizAnswer,
+} from "../src/multiplayer/scoring";
+import {
+  compareAnswerSimilarity,
+  isSimilarityBonus,
+  normalizeAnswerText,
+} from "../src/multiplayer/similarity";
+import { generateRoomCode, normalizeRoomCode } from "../src/multiplayer/identity";
+import { hostPath, parseAppRoute, playerPath } from "../src/multiplayer/routes";
 import type { PublicPlayer } from "../src/multiplayer/types";
 
 function player(id: string, name: string, score: number): PublicPlayer {
@@ -28,13 +39,17 @@ describe("multiplayer text similarity", () => {
   });
 
   it("scores unrelated answers below the bonus threshold", () => {
-    expect(compareAnswerSimilarity("совсем другой ответ", "я люблю кататься на велике").score).toBeLessThan(0.5);
+    expect(compareAnswerSimilarity("совсем другой ответ", "я люблю кататься на велике").score).toBeLessThan(
+      0.5,
+    );
   });
 });
 
 describe("multiplayer leaderboard", () => {
   it("sorts by score, then name, and gives equal scores the same rank", () => {
-    expect(buildLeaderboard([player("b", "Боря", 2), player("a", "Аня", 3), player("c", "Саша", 2)])).toMatchObject([
+    expect(
+      buildLeaderboard([player("b", "Боря", 2), player("a", "Аня", 3), player("c", "Саша", 2)]),
+    ).toMatchObject([
       { playerId: "a", rank: 1, score: 3 },
       { playerId: "b", rank: 2, score: 2 },
       { playerId: "c", rank: 2, score: 2 },
@@ -54,6 +69,31 @@ describe("multiplayer quiz scoring", () => {
   });
 });
 
+describe("multiplayer freestyle voting validation", () => {
+  it("rejects self-votes and unknown submissions", () => {
+    expect(canVoteForSubmission("p1", "p1", ["p1", "p2"])).toBe(false);
+    expect(canVoteForSubmission("p1", "missing", ["p1", "p2"])).toBe(false);
+    expect(canVoteForSubmission("p1", "p2", ["p1", "p2"])).toBe(true);
+  });
+});
+
+describe("multiplayer routes and room codes", () => {
+  it("normalizes room codes for typed and pasted input", () => {
+    expect(normalizeRoomCode(" ab-c 123 !!! ")).toBe("ABC123");
+    expect(normalizeRoomCode("abcdefghi")).toBe("ABCDEF");
+  });
+
+  it("generates six-character room codes", () => {
+    expect(generateRoomCode()).toMatch(/^[A-Z0-9]{6}$/);
+  });
+
+  it("parses direct host and player links", () => {
+    expect(parseAppRoute(hostPath("ABC123"))).toEqual({ kind: "host", code: "ABC123" });
+    expect(parseAppRoute(playerPath("ABC123"))).toEqual({ kind: "player", code: "ABC123" });
+    expect(parseAppRoute("/room/abc-123/player")).toEqual({ kind: "player", code: "ABC123" });
+  });
+});
+
 describe("freestyle round order", () => {
   it("limits multiplayer freestyle to 8 single-line answer rounds from content", () => {
     const order = buildMultiplayerRoundOrder("freestyle");
@@ -65,12 +105,21 @@ describe("freestyle round order", () => {
 
 describe("multiplayer identity reducer", () => {
   it("remembers room-scoped host and player identities", () => {
-    const withClient = identityReducer({ clientId: null, hostTokensByRoom: {}, playerIdsByRoom: {} }, {
-      type: "set_client_id",
-      clientId: "client-1",
+    const withClient = identityReducer(
+      { clientId: null, hostTokensByRoom: {}, playerIdsByRoom: {} },
+      {
+        type: "set_client_id",
+        clientId: "client-1",
+      },
+    );
+    const withHost = identityReducer(withClient, {
+      type: "remember_host",
+      roomCode: "ABC123",
+      hostToken: "host-1",
     });
-    const withHost = identityReducer(withClient, { type: "remember_host", roomCode: "ABC123", hostToken: "host-1" });
-    expect(identityReducer(withHost, { type: "remember_player", roomCode: "ABC123", playerId: "player-1" })).toEqual({
+    expect(
+      identityReducer(withHost, { type: "remember_player", roomCode: "ABC123", playerId: "player-1" }),
+    ).toEqual({
       clientId: "client-1",
       hostTokensByRoom: { ABC123: "host-1" },
       playerIdsByRoom: { ABC123: "player-1" },
