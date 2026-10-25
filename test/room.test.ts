@@ -589,3 +589,30 @@ it("redacts unrevealed lyric lines in all snapshots until results", async () => 
   const snapshot = spectator.last;
   expect(snapshot.type === "snapshot" && snapshot.state.round?.lyrics).toEqual(stored.lyrics);
 });
+
+it("awards the exact freestyle match bonus using private lyrics after public redaction", async () => {
+  const f = await fixture();
+  await f.start("freestyle");
+  const ids = f.players.map((player) => (player.state?.role === "player" ? player.state.playerId : ""));
+  const texts = ["Откуда в жопе бриллианты", "абсолютно другой ответ", "никто не знает"];
+  for (let n = 0; n < 3; n++)
+    await f.send(f.players[n]!, {
+      type: "player_freestyle_submit",
+      turnId: f.game.state.turnId,
+      text: texts[n],
+    });
+  for (let n = 0; n < 3; n++)
+    await f.send(f.players[n]!, {
+      type: "player_vote",
+      turnId: f.game.state.turnId,
+      submissionId: ids[n === 0 ? 1 : 0],
+    });
+  expect(f.game.state.phase).toBe("round_results");
+  expect(f.game.state.roundResult).toMatchObject({
+    kind: "freestyle",
+    submissions: expect.arrayContaining([
+      expect.objectContaining({ playerId: ids[0], similarityBonus: true, tieBrokenWinner: true, votes: 2 }),
+    ]),
+  });
+  expect(f.game.state.playersById[ids[0]!]!.score).toBe(2);
+});

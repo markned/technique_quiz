@@ -12,7 +12,7 @@ Reviewed the room engine and transport, player identity and private snapshots, i
 
 ## Acceptance evidence
 
-- 54 unit tests passed after these changes, including quorum 2/3, initial skip, client majority/tie handling, restart/reconnect, membership locking, private answer restoration, body limits and deploy configuration validation.
+- 55 unit tests passed after these changes, including quorum 2/3, initial skip, client majority/tie handling, restart/reconnect, membership locking, private answer restoration, body limits and deploy configuration validation.
 - Accelerated real-connection run with 2 players: 14 quiz rounds, no initial ballot.
 - Following real-connection run with 3 players: initial ballot, 14 quiz rounds, final ballot and 8 freestyle rounds in the same room.
 - Manual fresh-session entry from the home page succeeded, and refresh restored the same player.
