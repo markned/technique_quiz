@@ -8,6 +8,7 @@ type QuizOrderLinesProps = {
   lineText: (id: number) => string;
   correctIds: number[];
   disabled: boolean;
+  displayOnly?: boolean;
   onReorder: (ids: number[]) => void;
 };
 
@@ -17,12 +18,27 @@ export const QuizOrderLines = memo(function QuizOrderLines({
   lineText,
   correctIds,
   disabled,
+  displayOnly = false,
   onReorder,
 }: QuizOrderLinesProps) {
   const isFeedback = roundState === "quiz_feedback";
   const visible = (roundState === "paused_for_guess" || isFeedback) && orderedIds.length >= 3;
   if (!visible) return null;
 
+  if (displayOnly)
+    return (
+      <section className="quiz-options-panel genius-style quiz-order-panel" aria-label="Строки ответа">
+        <ol className="quiz-order-list">
+          {orderedIds.map((id) => (
+            <li key={id} className="quiz-order-li">
+              <div className="lyric-line genius-bar quiz-option quiz-order-row" style={{ cursor: "default" }}>
+                <span className="quiz-order-row__text">{lineText(id) || "—"}</span>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+    );
   const dragEnabled = !disabled && !isFeedback;
 
   const move = (from: number, to: number) => {

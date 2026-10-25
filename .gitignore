@@ -23,3 +23,6 @@ vite/**/*.d.ts
 
 # Исходник >100MB (ролик для dock-chroma); в репозитории — только dock-chroma.mp4
 public/content/video/ui/1080P.mov
+
+.wrangler/
+.dev.vars*

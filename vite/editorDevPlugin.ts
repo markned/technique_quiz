@@ -21,11 +21,10 @@ function tryTranscodeUploadToM4aAac192(inputPath: string): string | null {
   const base = basename(inputPath, ext);
   const outPath = join(dirname(inputPath), `${base}.m4a`);
   try {
-    execFileSync(
-      "ffmpeg",
-      ["-y", "-i", inputPath, "-vn", "-c:a", "aac", "-b:a", "192k", outPath],
-      { stdio: "ignore", timeout: 300_000 },
-    );
+    execFileSync("ffmpeg", ["-y", "-i", inputPath, "-vn", "-c:a", "aac", "-b:a", "192k", outPath], {
+      stdio: "ignore",
+      timeout: 300_000,
+    });
     if (existsSync(outPath)) {
       try {
         unlinkSync(inputPath);
@@ -73,6 +72,16 @@ export function editorDevPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url?.split("?")[0] ?? "";
+        if (url.startsWith("/api/editor/")) {
+          const address = req.socket.remoteAddress ?? "";
+          if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(address)) {
+            res.writeHead(403, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({ error: "Локальный редактор доступен только на компьютере разработчика." }),
+            );
+            return;
+          }
+        }
         if (url === "/api/editor/save-rounds" && req.method === "POST") {
           try {
             const body = (await readJsonBody(req)) as { content?: string };
@@ -159,7 +168,10 @@ export function editorDevPlugin(): Plugin {
         if (url === "/api/editor/git-push" && req.method === "POST") {
           try {
             const body = (await readJsonBody(req)) as { roundsCount?: number };
-            const n = typeof body.roundsCount === "number" && Number.isFinite(body.roundsCount) ? Math.floor(body.roundsCount) : 0;
+            const n =
+              typeof body.roundsCount === "number" && Number.isFinite(body.roundsCount)
+                ? Math.floor(body.roundsCount)
+                : 0;
             const root = server.config.root;
             const msg = `База: ${n} треков (rounds.ts, music/, ui/, video/)`;
             const pushedAt = new Date().toISOString();

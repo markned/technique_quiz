@@ -15,7 +15,7 @@
 }
 
 .quiz-options-panel.genius-style button.lyric-line.genius-bar.quiz-option,
-.quiz-options-panel.genius-style div.lyric-line.genius-bar.quiz-option.quiz-order-row {
+.quiz-options-panel.genius-style div.lyric-line.genius-bar.quiz-option {
   margin: 0;
   position: relative;
   overflow: hidden;
@@ -45,7 +45,7 @@
 }
 
 /* Сегменты по \n: между ними больше воздуха; внутри сегмента — обычный межстрочный при переносе по ширине */
-.quiz-options-panel.genius-style button.lyric-line.genius-bar.quiz-option .quiz-option-segment {
+.quiz-options-panel.genius-style .lyric-line.genius-bar.quiz-option .quiz-option-segment {
   display: block;
 }
 

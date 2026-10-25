@@ -20,7 +20,6 @@ import type { PublicPlayer } from "../src/multiplayer/types";
 function player(id: string, name: string, score: number): PublicPlayer {
   return {
     id,
-    clientId: `client-${id}`,
     name,
     score,
     connected: true,
@@ -90,6 +89,7 @@ describe("multiplayer routes and room codes", () => {
   it("parses direct host and player links", () => {
     expect(parseAppRoute(hostPath("ABC123"))).toEqual({ kind: "host", code: "ABC123" });
     expect(parseAppRoute(playerPath("ABC123"))).toEqual({ kind: "player", code: "ABC123" });
+    expect(parseAppRoute("/room/ABC123")).toEqual({ kind: "player", code: "ABC123" });
     expect(parseAppRoute("/room/abc-123/player")).toEqual({ kind: "player", code: "ABC123" });
   });
 });
@@ -132,6 +132,7 @@ describe("multiplayer message validation", () => {
     expect(
       ClientMessageSchema.safeParse({
         type: "player_quiz_answer",
+        turnId: "turn-test",
         answer: { variant: "mc4", selectedIndex: 3 },
       }).success,
     ).toBe(true);
@@ -141,5 +142,15 @@ describe("multiplayer message validation", () => {
         submissionId: "",
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("multiplayer multiple-choice pool", () => {
+  it("excludes reorder questions while preserving a full quiz session", () => {
+    const order = buildMultiplayerRoundOrder("quiz");
+    expect(order).toHaveLength(14);
+    expect(order.every((round) => round.revealLineIds.length > 0 && round.revealLineIds.length <= 2)).toBe(
+      true,
+    );
   });
 });

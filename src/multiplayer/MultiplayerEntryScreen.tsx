@@ -21,10 +21,10 @@ export function MultiplayerEntryScreen() {
   };
 
   return (
-    <main className="app-shell multiplayer-shell multiplayer-entry-shell">
-      <section className="multiplayer-panel multiplayer-menu-card">
+    <main className="app-shell rules-screen-shell multiplayer-shell multiplayer-entry-shell">
+      <section className="rules-screen-card multiplayer-panel multiplayer-menu-card">
         <p className="multiplayer-eyebrow">Мультиплеер</p>
-        <h1>Комната игры</h1>
+        <h1 className="rules-screen-title">Комната игры</h1>
         <p className="multiplayer-muted">
           Создай комнату на главном экране или введи код, если подключаешься с телефона.
         </p>

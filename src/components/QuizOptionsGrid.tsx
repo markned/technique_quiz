@@ -19,6 +19,7 @@ type QuizOptionsGridProps = {
   onSelect: (index: number) => void;
   roundState: RoundState;
   disabled: boolean;
+  displayOnly?: boolean;
 };
 
 export const QuizOptionsGrid = memo(function QuizOptionsGrid({
@@ -28,6 +29,7 @@ export const QuizOptionsGrid = memo(function QuizOptionsGrid({
   onSelect,
   roundState,
   disabled,
+  displayOnly = false,
 }: QuizOptionsGridProps) {
   const isFeedback = roundState === "quiz_feedback";
   const visible = (roundState === "paused_for_guess" || isFeedback) && options.length === 4;
@@ -51,6 +53,12 @@ export const QuizOptionsGrid = memo(function QuizOptionsGrid({
               cls += " quiz-option--dim";
             }
           }
+          if (displayOnly)
+            return (
+              <div key={i} className={cls} style={{ cursor: "default" }}>
+                {optionLabel(text)}
+              </div>
+            );
           return (
             <button
               key={i}

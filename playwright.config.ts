@@ -7,6 +7,7 @@ export default defineConfig({
     timeout: 5_000,
   },
   use: {
+    channel: process.env.PLAYWRIGHT_CHANNEL,
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:18768",
     trace: "retain-on-failure",
   },
@@ -18,8 +19,8 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: "npm run party:dev",
-      url: "http://127.0.0.1:1999/parties/main/E2EHEALTH",
+      command: `npm run party:test -- --persist-to .wrangler/e2e-${process.pid}`,
+      url: "http://127.0.0.1:1999/parties/main/E2EHLT",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

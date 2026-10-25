@@ -4,8 +4,8 @@ import { buildQuizMcOptions, getQuizUiVariant, revealAnswerText } from "../helpe
 import { shuffle, shuffleUntilOrderDiffers } from "../helpers/shuffle";
 import { MULTIPLAYER_FREESTYLE_SESSION_LENGTH, MULTIPLAYER_SESSION_LENGTH } from "./types";
 
-function visibleRounds(): Round[] {
-  return allRounds.filter((round) => !round.hidden);
+function visibleRounds(source = allRounds): Round[] {
+  return source.filter((round) => !round.hidden);
 }
 
 function isMultiLineRevealRound(round: Round): boolean {
@@ -13,7 +13,9 @@ function isMultiLineRevealRound(round: Round): boolean {
 }
 
 function buildQuizEligiblePool(visible: Round[]): Round[] {
-  return visible.filter((round) => !round.hidden && round.revealLineIds.length >= 1);
+  return visible.filter(
+    (round) => !round.hidden && round.revealLineIds.length >= 1 && getQuizUiVariant(round) === "mc4",
+  );
 }
 
 function buildFreestyleEligiblePool(visible: Round[]): Round[] {
@@ -31,15 +33,15 @@ function shuffleWithinDifficultyBuckets(source: Round[]): Round[] {
   return [...buckets.keys()].sort((a, b) => a - b).flatMap((key) => shuffle(buckets.get(key) ?? []));
 }
 
-export function buildMultiplayerRoundOrder(mode: "freestyle" | "quiz"): Round[] {
+export function buildMultiplayerRoundOrder(mode: "freestyle" | "quiz", source = allRounds): Round[] {
   if (mode === "freestyle") {
-    return shuffleWithinDifficultyBuckets(buildFreestyleEligiblePool(visibleRounds())).slice(
+    return shuffleWithinDifficultyBuckets(buildFreestyleEligiblePool(visibleRounds(source))).slice(
       0,
       MULTIPLAYER_FREESTYLE_SESSION_LENGTH,
     );
   }
 
-  const pool = buildQuizEligiblePool(visibleRounds());
+  const pool = buildQuizEligiblePool(visibleRounds(source));
   if (pool.length <= MULTIPLAYER_SESSION_LENGTH) return shuffleWithinDifficultyBuckets(pool);
 
   const hardTailCount = 4;
@@ -65,6 +67,7 @@ export function roundById(roundId: number | null): Round | null {
 export function buildQuizRoundPayload(
   round: Round,
   priorCorrectAnswers: ReadonlySet<string>,
+  source = allRounds,
 ): {
   variant: ReturnType<typeof getQuizUiVariant>;
   options: string[];
@@ -75,7 +78,11 @@ export function buildQuizRoundPayload(
 } {
   const variant = getQuizUiVariant(round);
   if (variant === "mc4") {
-    const built = buildQuizMcOptions(round, buildQuizEligiblePool(visibleRounds()), priorCorrectAnswers);
+    const built = buildQuizMcOptions(
+      round,
+      buildQuizEligiblePool(visibleRounds(source)),
+      priorCorrectAnswers,
+    );
     return {
       variant,
       options: built.options,

@@ -1,0 +1,115 @@
+.sim-shell {
+  position: fixed;
+  inset: 0;
+  background: #090b10;
+  color: #edf0f7;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 10px;
+  font-family: Manrope, system-ui, sans-serif;
+}
+.sim-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sim-toolbar > div {
+  margin-right: auto;
+  display: grid;
+  gap: 3px;
+}
+.sim-toolbar strong {
+  font-size: 16px;
+}
+.sim-toolbar span,
+.sim-footer {
+  font-size: 12px;
+  color: #a2aaba;
+}
+.sim-toolbar button {
+  border: 1px solid #383d4c;
+  border-radius: 8px;
+  background: #202432;
+  color: white;
+  padding: 10px 13px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sim-toolbar button:first-of-type {
+  background: #7276ed;
+  border-color: #7276ed;
+}
+.sim-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+}
+.sim-layout-phones {
+  grid-template-columns: 1.35fr 1fr;
+}
+.sim-clients {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+}
+.sim-window {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #303441;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #050608;
+}
+.sim-window > header {
+  padding: 9px 10px;
+  background: #171b25;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sim-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.sim-viewport iframe {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: center;
+  border: 0;
+  background: #0a0d14;
+}
+.sim-layout-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+.sim-layout-grid .sim-clients {
+  display: contents;
+}
+.sim-footer {
+  margin: 0;
+  line-height: 1.5;
+}
+@media (max-width: 800px) {
+  .sim-layout-phones {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+}
+.sim-players-2.sim-layout-grid > .sim-window {
+  grid-row: 1 / -1;
+}
+.sim-players-2.sim-layout-phones .sim-clients {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}

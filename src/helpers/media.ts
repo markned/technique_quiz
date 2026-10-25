@@ -1,7 +1,10 @@
 import type { Round } from "../types";
+import { apiUrl } from "../community/api";
 import { audioMusicUrl } from "./audioPaths";
 
 export const toLocalMediaUrl = (round: Round): string => {
+  if (/^\/api\/media\/[a-f0-9-]{36}$/.test(round.audioFile)) return apiUrl(round.audioFile);
+  if (round.audioFile.startsWith("data:audio/")) return round.audioFile;
   if (round.audioFile?.trim()) {
     return audioMusicUrl(round.audioFile.trim());
   }

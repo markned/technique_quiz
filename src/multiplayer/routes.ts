@@ -1,4 +1,5 @@
 import { generateRoomCode, normalizeRoomCode } from "./identity";
+import { publicGameOrigin } from "./env";
 import type { RoomCode } from "./types";
 
 export type AppRoute =
@@ -14,7 +15,7 @@ export function parseAppRoute(pathname = window.location.pathname): AppRoute {
   if (parts[0] === "room" && parts[1]) {
     const code = normalizeRoomCode(parts[1]);
     if (parts[2] === "host") return { kind: "host", code };
-    if (parts[2] === "player") return { kind: "player", code };
+    if (!parts[2] || parts[2] === "player") return { kind: "player", code };
   }
   if (parts[0] === "join" && parts[1]) {
     return { kind: "player", code: normalizeRoomCode(parts[1]) };
@@ -35,5 +36,5 @@ export function createHostRoomUrl(): string {
 }
 
 export function publicJoinUrl(code: RoomCode): string {
-  return `${window.location.origin}${playerPath(code)}`;
+  return `${publicGameOrigin()}${playerPath(code)}`;
 }

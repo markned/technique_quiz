@@ -4,6 +4,7 @@ const CLIENT_ID_KEY = "technique_quiz_multiplayer_client_id";
 const PLAYER_NAME_KEY = "technique_quiz_multiplayer_player_name";
 const HOST_TOKEN_PREFIX = "technique_quiz_multiplayer_host_token:";
 const PLAYER_ID_PREFIX = "technique_quiz_multiplayer_player_id:";
+const memoryStorage = new Map<string, string>();
 const ROOM_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function randomToken(prefix: string, size = 24): string {
@@ -12,11 +13,28 @@ function randomToken(prefix: string, size = 24): string {
   return `${prefix}_${Array.from(bytes, (byte) => ROOM_CHARS[byte % ROOM_CHARS.length]).join("")}`;
 }
 
-function safeLocalStorage(): Storage | null {
+function safeLocalStorage(): Pick<Storage, "getItem" | "setItem"> {
   try {
-    return window.localStorage;
+    const storage = window.localStorage;
+    const probe = "technique_quiz_storage_probe";
+    storage.setItem(probe, "1");
+    storage.removeItem(probe);
+    const simulation = import.meta.env.DEV
+      ? new URLSearchParams(window.location.search).get("simClient")
+      : null;
+    if (simulation)
+      return {
+        getItem: (key) => storage.getItem(`simulation:${simulation}:${key}`),
+        setItem: (key, value) => storage.setItem(`simulation:${simulation}:${key}`, value),
+      };
+    return storage;
   } catch {
-    return null;
+    return {
+      getItem: (key) => memoryStorage.get(key) ?? null,
+      setItem: (key, value) => {
+        memoryStorage.set(key, value);
+      },
+    };
   }
 }
 
@@ -63,9 +81,32 @@ export function getKnownPlayerId(roomCode: RoomCode): PlayerId | undefined {
 }
 
 export function getSavedPlayerName(): string {
+  if (import.meta.env.DEV) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("simClient") && params.get("simName")) return params.get("simName")!.slice(0, 24);
+  }
   return safeLocalStorage()?.getItem(PLAYER_NAME_KEY) ?? "";
 }
 
 export function rememberPlayerName(name: string): void {
   safeLocalStorage()?.setItem(PLAYER_NAME_KEY, name);
+}
+
+export function getOrCreatePlayerToken(code: RoomCode): string {
+  const storage = safeLocalStorage();
+  const key = `technique_quiz_multiplayer_player_token:${code}`;
+  const existing = storage.getItem(key);
+  if (existing) return existing;
+  const token = randomToken("p", 32);
+  storage.setItem(key, token);
+  return token;
+}
+
+export function adoptHostToken(code: RoomCode): void {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const token = params.get("screen");
+  if (token && /^h_[A-Z0-9]{24,64}$/.test(token)) {
+    safeLocalStorage().setItem(`${HOST_TOKEN_PREFIX}${code}`, token);
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
 }

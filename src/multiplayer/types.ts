@@ -1,8 +1,12 @@
-import type { GameMode } from "../types";
+import type { GameMode, Round } from "../types";
 import type { QuizUiVariant } from "../helpers/quizOptions";
 
 export const ROOM_CODE_LENGTH = 6;
-export const MIN_PLAYERS = 3;
+export const MIN_PLAYERS = 2;
+export const MIN_FREESTYLE_PLAYERS = 3;
+export function minimumPlayersForMode(mode: "quiz" | "freestyle" | null): number {
+  return mode === "freestyle" ? MIN_FREESTYLE_PLAYERS : MIN_PLAYERS;
+}
 export const MAX_PLAYERS = 10;
 export const MULTIPLAYER_SESSION_LENGTH = 14;
 export const MULTIPLAYER_FREESTYLE_SESSION_LENGTH = 8;
@@ -27,11 +31,11 @@ export type MultiplayerPhase =
   | "freestyle_submitting"
   | "freestyle_voting"
   | "round_results"
-  | "finished";
+  | "finished"
+  | "expired";
 
 export type PublicPlayer = {
   id: PlayerId;
-  clientId: ClientId;
   name: string;
   score: number;
   connected: boolean;
@@ -108,6 +112,16 @@ export type FreestyleRoundResult = {
 
 export type PublicRoundResult = QuizRoundResult | FreestyleRoundResult;
 
+export type FinalVoteState = {
+  votes: Record<PlayerId, MultiplayerMode>;
+  decision: { mode: MultiplayerMode; random: boolean; startsAt: number } | null;
+};
+export type PrivatePlayerState = {
+  quizAnswer: QuizAnswer | null;
+  submission: string | null;
+  votedSubmissionId: PlayerId | null;
+};
+
 export type PublicRoomState = {
   code: RoomCode;
   phase: MultiplayerPhase;
@@ -115,10 +129,22 @@ export type PublicRoomState = {
   minPlayers: number;
   maxPlayers: number;
   hostConnected: boolean;
+  pausedAt: number | null;
+  expiresAt: number;
+  discord: boolean;
+  turnId: string;
+  playingStartedAt: number | null;
+  backgroundStartedAt: number | null;
+  answerSeconds: number;
+  voteSeconds: number;
+  finalVote: FinalVoteState | null;
+  initialVote: FinalVoteState | null;
+  rosterLocked: boolean;
   players: PublicPlayer[];
   currentRoundIndex: number;
   totalRounds: number;
   currentRoundId: number | null;
+  round: Round | null;
   upcomingRoundTitle: string | null;
   deadlineAt: number | null;
   transitionUntil: number | null;
@@ -132,8 +158,10 @@ export type PublicRoomState = {
 };
 
 export type ServerMessage =
+  | { type: "player_left" }
   | {
       type: "snapshot";
+      serverNow: number;
       state: PublicRoomState;
       you: {
         role: "host" | "player" | "spectator";
@@ -141,11 +169,14 @@ export type ServerMessage =
         playerId?: PlayerId;
         reconnected: boolean;
         restoring: boolean;
+        own?: PrivatePlayerState;
       };
     }
   | {
       type: "error";
       code:
+        | "room_expired"
+        | "session_replaced"
         | "invalid_message"
         | "invalid_room"
         | "host_conflict"

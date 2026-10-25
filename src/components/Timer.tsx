@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 
 type TimerProps = {
   seconds: number;
+  remaining?: boolean;
   isActive: boolean;
   totalSeconds: number;
 };
@@ -20,8 +21,9 @@ function timerAccentColor(seconds: number, totalSeconds: number): string {
 
 const CIRCUMFERENCE = 2 * Math.PI * 45;
 
-export const Timer = memo(function Timer({ seconds, isActive, totalSeconds }: TimerProps) {
-  const progress = totalSeconds > 0 ? 1 - seconds / totalSeconds : 0;
+export const Timer = memo(function Timer({ seconds, isActive, totalSeconds, remaining = false }: TimerProps) {
+  const ratio = totalSeconds > 0 ? Math.min(1, Math.max(0, seconds / totalSeconds)) : 0;
+  const progress = totalSeconds > 0 ? (remaining ? ratio : 1 - ratio) : 0;
   const strokeDashoffset = CIRCUMFERENCE * (1 - progress);
   const accent = useMemo(() => timerAccentColor(seconds, totalSeconds), [seconds, totalSeconds]);
 

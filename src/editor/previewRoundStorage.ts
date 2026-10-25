@@ -167,6 +167,7 @@ export function navigateToQuizPreview(mode: GameMode): void {
 
 /** Путь к редактору относительно `base` (например `/editor`). */
 export function editorHref(): string {
+  if (sessionStorage.getItem("technique_quiz_preview_return") === "/community") return "/community";
   const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
   return `${base}editor`;
 }

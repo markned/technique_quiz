@@ -1,14 +1,24 @@
+import type { ReactNode } from "react";
 import { boostVolume } from "../lib/volumeBoost";
 
 type OutroScreenProps = {
   videoSrc: string;
+  children?: ReactNode;
+  restartLabel?: string;
   /** Подпись под кнопками (например счёт викторины) */
   subtitle?: string;
   onBackToModeSelect: () => void;
   onExitToStart: () => void;
 };
 
-export function OutroScreen({ videoSrc, subtitle, onBackToModeSelect, onExitToStart }: OutroScreenProps) {
+export function OutroScreen({
+  videoSrc,
+  subtitle,
+  children,
+  restartLabel = "К выбору режима",
+  onBackToModeSelect,
+  onExitToStart,
+}: OutroScreenProps) {
   const onPlay = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = e.currentTarget;
     video.muted = false;
@@ -26,6 +36,7 @@ export function OutroScreen({ videoSrc, subtitle, onBackToModeSelect, onExitToSt
         loop
         onPlay={onPlay}
       />
+      {children ? <div className="multiplayer-outro-results">{children}</div> : null}
       {subtitle ? (
         <p className="outro-subtitle" role="status">
           {subtitle}
@@ -36,8 +47,8 @@ export function OutroScreen({ videoSrc, subtitle, onBackToModeSelect, onExitToSt
           type="button"
           className="outro-restart-btn"
           onClick={onBackToModeSelect}
-          title="К выбору режима"
-          aria-label="К выбору режима"
+          title={restartLabel}
+          aria-label={restartLabel}
         >
           ↻
         </button>

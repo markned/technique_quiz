@@ -13,11 +13,14 @@ const TAIL_PREVIEW_SEC = 2.5;
 
 /** Локальная волна + жёлтая область как триммер (ползунки по краям региона) */
 export function AudioWaveformTrim({ audioUrl, start, end, onRangeChange }: AudioWaveformTrimProps) {
+  const onRangeChangeRef = useRef(onRangeChange);
+  useEffect(() => { onRangeChangeRef.current = onRangeChange; }, [onRangeChange]);
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
   const regionsPluginRef = useRef<ReturnType<typeof RegionsPlugin.create> | null>(null);
   const regionIdRef = useRef("fragment");
   const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [dur, setDur] = useState(0);
   const [playing, setPlaying] = useState(false);
 
@@ -47,6 +50,7 @@ export function AudioWaveformTrim({ audioUrl, start, end, onRangeChange }: Audio
       return;
     }
 
+    setLoadError(null);
     const regions = RegionsPlugin.create();
     regionsPluginRef.current = regions;
 
@@ -89,11 +93,13 @@ export function AudioWaveformTrim({ audioUrl, start, end, onRangeChange }: Audio
         drag: true,
         resize: true,
       });
+    }).catch(() => {
+      if (!cancelled) setLoadError("Не удалось прочитать аудио. Проверь файл или загрузи другой трек.");
     });
 
     regions.on("region-updated", (region) => {
       if (region.id !== regionIdRef.current) return;
-      onRangeChange(region.start, region.end);
+      onRangeChangeRef.current(region.start, region.end);
     });
 
     return () => {
@@ -137,6 +143,7 @@ export function AudioWaveformTrim({ audioUrl, start, end, onRangeChange }: Audio
 
   return (
     <div className="editor-waveform-wrap">
+      {loadError ? <p role="alert">{loadError}</p> : null}
       <div className="editor-waveform-toolbar">
         <button
           type="button"
