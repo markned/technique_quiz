@@ -50,6 +50,7 @@ async function openMainModeChoice(page: Page) {
 
 async function clickWrongMc(page: Page, correctPattern: RegExp): Promise<string> {
   const buttons = page.locator(".quiz-options-grid button");
+  await expect(buttons).toHaveCount(4);
   const count = await buttons.count();
   for (let i = 0; i < count; i += 1) {
     const text = (await buttons.nth(i).innerText()).trim();
