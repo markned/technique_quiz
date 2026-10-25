@@ -120,7 +120,13 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
           authenticated.current = message.you.role !== "spectator";
           failures = 0;
           setStatus("connected");
-          if (message.state.phase !== "expired")
+          if (
+            message.state.phase !== "expired" &&
+            !(
+              (import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1") &&
+              new URLSearchParams(window.location.search).has("simClient")
+            )
+          )
             rememberRoom({ code, role, expiresAt: message.state.expiresAt });
           if (!clockInitialized && message.serverNow) {
             serverOffset.current = message.serverNow - Date.now();

@@ -31,7 +31,12 @@ export function recentRoom(): RecentRoom | null {
     return r &&
       /^[A-Z0-9]{6}$/.test(r.code) &&
       ["host", "player"].includes(r.role) &&
-      r.expiresAt > Date.now()
+      r.expiresAt > Date.now() &&
+      localStorage.getItem(
+        r.role === "host"
+          ? `technique_quiz_multiplayer_host_token:${r.code}`
+          : `technique_quiz_multiplayer_player_id:${r.code}`,
+      )
       ? r
       : null;
   } catch {
