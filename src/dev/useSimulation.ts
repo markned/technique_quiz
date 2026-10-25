@@ -11,7 +11,8 @@ export function useSimulation(
 ) {
   const [automatic, setAutomatic] = useState(false);
   const params = new URLSearchParams(window.location.search);
-  const active = import.meta.env.DEV && !!params.get("simClient");
+  const active =
+    (import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1") && !!params.get("simClient");
   const index = Number(params.get("simIndex") ?? 0);
   useEffect(() => {
     if (!active) return;

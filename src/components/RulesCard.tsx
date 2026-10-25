@@ -1,5 +1,4 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { useFitTextToHeight } from "../hooks/useFitTextToHeight";
 import { GameRulesCommon } from "../content/rules";
 import { RULES_AUDIO_DELAY_MS } from "../helpers/quizConfig";
 import type { GameMode } from "../types";
@@ -30,7 +29,6 @@ export function RulesCard({
   mode = "freestyle",
 }: RulesCardProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const { containerRef, textRef } = useFitTextToHeight({ maxPx: 44, floorMinPx: 8 });
 
   useEffect(() => {
     if (!playAudio || !audioSrc) {
@@ -71,11 +69,12 @@ export function RulesCard({
 
   return (
     <div className="rules-screen-card">
+      <p className="rules-step">Technique Quiz · Правила</p>
       <h2 id="rules-title" className="rules-screen-title">
         {rulesTitle}
       </h2>
-      <div ref={containerRef} className="rules-screen-body">
-        <div ref={textRef} className="rules-screen-text" data-rules-mode={mode}>
+      <div className="rules-screen-body">
+        <div className="rules-screen-text" data-rules-mode={mode}>
           {rulesContent}
         </div>
       </div>

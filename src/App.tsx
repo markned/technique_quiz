@@ -1,3 +1,4 @@
+import { useMenuStage, recentRoom } from "./navigation";
 import { IntroScreen } from "./components/IntroScreen";
 import { GameRulesScreen } from "./components/GameRulesScreen";
 import { ModeSelectScreen } from "./components/ModeSelectScreen";
@@ -13,7 +14,7 @@ import { RulesScreen } from "./components/RulesScreen";
 import { MainModeChoiceScreen } from "./components/MainModeChoiceScreen";
 import { StartScreen } from "./components/StartScreen";
 import { TransitionOverlay } from "./components/TransitionOverlay";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { MasterVolumeControl } from "./components/MasterVolumeControl";
 import { getGuessSeconds } from "./helpers/quizConfig";
 import { useQuizGame } from "./hooks/useQuizGame";
@@ -31,6 +32,34 @@ function LocalGameApp({
   initialRoundState?: "intro" | "game_rules";
 }) {
   const game = useQuizGame({ initialRoundState });
+  useEffect(() => {
+    if (!quizOnly || game.previewMode) return;
+    const pop = (e: PopStateEvent) => {
+      const target = window.location.hash.slice(1);
+      const active = !["game_rules", "rules", "intro", "finished"].includes(game.roundState);
+      if (
+        active &&
+        target !== "singleplayer/play" &&
+        !window.confirm("Выйти из игры? Текущий прогресс будет сброшен.")
+      ) {
+        e.stopImmediatePropagation();
+        history.forward();
+        return;
+      }
+      if (target === "singleplayer") game.backToGameRules();
+      if (target === "singleplayer/controls") game.restartQuiz();
+    };
+    window.addEventListener("popstate", pop);
+    return () => window.removeEventListener("popstate", pop);
+  }, [quizOnly, game]);
+  const selectQuiz = () => {
+    history.pushState(null, "", "#singleplayer/controls");
+    game.selectGameMode("quiz");
+  };
+  const playQuiz = () => {
+    if (quizOnly && !game.previewMode) history.pushState(null, "", "#singleplayer/play");
+    game.skipRulesAndStart();
+  };
 
   let content: ReactNode;
 
@@ -53,8 +82,9 @@ function LocalGameApp({
   } else if (game.roundState === "game_rules") {
     content = (
       <GameRulesScreen
+        onBack={onExitToHome}
         rulesScope={quizOnly ? "quiz" : "common"}
-        onComplete={quizOnly ? () => game.selectGameMode("quiz") : game.skipGameRulesToModeSelect}
+        onComplete={quizOnly ? selectQuiz : game.skipGameRulesToModeSelect}
       />
     );
   } else if (game.roundState === "mode_select") {
@@ -65,7 +95,7 @@ function LocalGameApp({
     if (!game.gameMode) {
       content = null;
     } else {
-      content = <RulesScreen onComplete={game.skipRulesAndStart} gameMode={game.gameMode} />;
+      content = <RulesScreen onBack={game.backToGameRules} onComplete={playQuiz} gameMode={game.gameMode} />;
     }
   } else if (game.roundState === "finished") {
     const subtitle = game.gameMode === "quiz" ? `Правильных ответов: ${game.quiz.score}` : undefined;
@@ -73,11 +103,12 @@ function LocalGameApp({
       <OutroScreen
         videoSrc={game.outroVideoSrc}
         subtitle={subtitle}
+        restartLabel={quizOnly ? "Сыграть ещё" : "К выбору режима"}
         onBackToModeSelect={
           quizOnly
             ? () => {
-                game.exitToStartScreen();
-                onExitToHome?.();
+                history.replaceState(null, "", "#singleplayer/controls");
+                game.restartQuiz();
               }
             : game.returnToModeSelect
         }
@@ -117,6 +148,7 @@ function LocalGameApp({
           touchMode={game.gesturePauseLayout}
           gameMode={game.gameMode}
           quizUiVariant={game.quiz.uiVariant}
+          restartLabel={quizOnly ? "Начать заново" : "К режимам"}
           onReturnToModeSelectRequest={() => game.overlay.setShowRestartConfirm(true)}
           onExitToStart={() => game.overlay.setShowExitConfirm(true)}
           onRulesRequest={() => game.overlay.setShowRulesOverlay(true)}
@@ -154,8 +186,8 @@ function LocalGameApp({
           onConfirm={() => {
             game.overlay.setShowRestartConfirm(false);
             if (quizOnly) {
-              game.exitToStartScreen();
-              onExitToHome?.();
+              history.replaceState(null, "", "#singleplayer/controls");
+              game.restartQuiz();
             } else {
               game.returnToModeSelect();
             }
@@ -192,9 +224,7 @@ function LocalGameApp({
 }
 
 function HomeApp() {
-  const [stage, setStage] = useState<"start" | "intro" | "main_mode_choice" | "singleplayer" | "multiplayer">(
-    "start",
-  );
+  const [stage, setStage] = useMenuStage();
   if (stage === "intro") {
     return (
       <>
@@ -206,10 +236,21 @@ function HomeApp() {
       </>
     );
   }
-  if (stage === "main_mode_choice") {
+  if (stage === "main_mode_choice" || stage === "menu") {
     return (
       <>
         <MasterVolumeControl />
+        <button className="menu-back" onClick={() => setStage("start")}>
+          ← Назад
+        </button>
+        {recentRoom() ? (
+          <a
+            className="recent-room"
+            href={`/room/${recentRoom()!.code}/${recentRoom()!.role === "host" ? "host" : "player"}`}
+          >
+            Вернуться в комнату {recentRoom()!.code} · {recentRoom()!.role === "host" ? "Ведущий" : "Игрок"}
+          </a>
+        ) : null}
         <MainModeChoiceScreen
           onSingleplayer={() => setStage("singleplayer")}
           onMultiplayer={() => setStage("multiplayer")}
@@ -217,13 +258,16 @@ function HomeApp() {
       </>
     );
   }
-  if (stage === "singleplayer") {
-    return <LocalGameApp quizOnly initialRoundState="game_rules" onExitToHome={() => setStage("start")} />;
+  if (stage.startsWith("singleplayer")) {
+    return <LocalGameApp quizOnly initialRoundState="game_rules" onExitToHome={() => setStage("menu")} />;
   }
   if (stage === "multiplayer") {
     return (
       <>
         <MasterVolumeControl />
+        <button className="menu-back" onClick={() => setStage("menu")}>
+          ← Назад
+        </button>
         <MultiplayerEntryScreen />
       </>
     );

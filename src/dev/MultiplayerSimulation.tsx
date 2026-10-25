@@ -67,7 +67,8 @@ export function MultiplayerSimulation() {
   const createCode = () => (fast ? `E2EF${generateRoomCode().slice(0, 2)}` : generateRoomCode());
   const [code, setCode] = useState(createCode);
   const [playerCount, setPlayerCount] = useState(3);
-  const server = fast ? "&simServer=" + encodeURIComponent("http://localhost:2001") : "";
+  const server =
+    fast && import.meta.env.DEV ? "&simServer=" + encodeURIComponent("http://localhost:2001") : "";
   const [automatic, setAutomatic] = useState(false);
   const [layout, setLayout] = useState("grid");
   return (

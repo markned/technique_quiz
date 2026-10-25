@@ -8,6 +8,7 @@ function e2eRoomCode(prefix: string): string {
 
 async function joinPlayer(browser: Browser, code: string, name: string): Promise<Page> {
   const page = await browser.newPage();
+  page.on("dialog", (dialog) => void dialog.accept());
   await page.goto(`/join/${code}`);
   // Keep native click hit-testing while removing the decorative perpetual shake.
   await page.addStyleTag({ content: ".quiz-option { animation: none !important; }" });
@@ -21,6 +22,7 @@ async function joinPlayer(browser: Browser, code: string, name: string): Promise
 
 async function setupRoom(browser: Browser, code: string) {
   const host = await browser.newPage();
+  host.on("dialog", (dialog) => void dialog.accept());
   await host.goto(`/room/${code}/host`);
   await expect(host.getByRole("heading", { name: code })).toBeVisible();
   await expect(host.getByRole("button", { name: "К выбору режима" })).toBeDisabled();
@@ -210,6 +212,7 @@ test("a lost main screen pauses the game and a recovery link resumes it on anoth
 test("real music playback handles media errors and player refreshes", async ({ browser }) => {
   const code = `N${Date.now().toString(36).slice(-5).toUpperCase()}`;
   const host = await browser.newPage();
+  host.on("dialog", (dialog) => void dialog.accept());
   await host.addInitScript(() => {
     const probe = { loads: 0, audio: null as HTMLMediaElement | null };
     Object.defineProperty(window, "__musicProbe", { value: probe });
@@ -268,6 +271,7 @@ test("real music playback handles media errors and player refreshes", async ({ b
 test("two players skip initial voting and cannot switch to freestyle", async ({ browser }) => {
   const code = e2eRoomCode("D");
   const host = await browser.newPage();
+  host.on("dialog", (dialog) => void dialog.accept());
   await host.goto(`/room/${code}/host`);
   const alice = await joinPlayer(browser, code, "Alice");
   await joinPlayer(browser, code, "Bob");
@@ -282,6 +286,7 @@ test("two players skip initial voting and cannot switch to freestyle", async ({ 
 test("a new player joins through the home page using a room code", async ({ browser }) => {
   const code = e2eRoomCode("H");
   const host = await browser.newPage();
+  host.on("dialog", (dialog) => void dialog.accept());
   await host.goto(`/room/${code}/host`);
   await expect(host.getByRole("heading", { name: code })).toBeVisible();
   const player = await browser.newPage();
@@ -293,4 +298,39 @@ test("a new player joins through the home page using a room code", async ({ brow
   await player.getByRole("button", { name: "Играть", exact: true }).click();
   await expect(host.getByText("Fresh player")).toBeVisible();
   await expect(player.getByRole("heading", { name: "Ждём ведущий экран" })).toBeVisible();
+});
+
+test("host manual pause survives refresh, replay freezes time and answered players cannot replay", async ({
+  browser,
+}) => {
+  const { host, alice, bob } = await setupRoom(browser, e2eRoomCode("P"));
+  await chooseInitialMode(host, alice, bob, "quiz");
+  await host.getByRole("button", { name: "Начать игру", exact: true }).click();
+  await expect(alice.getByRole("button", { name: "Повторить фрагмент" })).toBeVisible({ timeout: 20000 });
+  await host.getByRole("button", { name: "Пауза / меню" }).click();
+  await expect(host.getByRole("heading", { name: "Игра на паузе" })).toBeVisible();
+  await expect(alice.getByText("Ведущий поставил игру на паузу")).toBeVisible();
+  await expect(alice.getByRole("button", { name: "Повторить фрагмент" })).toBeDisabled();
+  await host.reload();
+  await expect(host.getByRole("button", { name: "Продолжить игру" })).toBeVisible();
+  await host.getByRole("button", { name: "Продолжить игру" }).click();
+  await alice.getByRole("button", { name: "Повторить фрагмент" }).click();
+  await expect(bob.getByRole("button", { name: /Готовим повтор|Повтор ·/ })).toBeDisabled();
+  await alice.locator(".quiz-options-grid button").first().click();
+  await alice.getByRole("button", { name: "Подтвердить ответ" }).click();
+  await expect(alice.getByRole("button", { name: "Повторить фрагмент" })).toHaveCount(0);
+});
+
+test("menu back navigation and readable rules work on a narrow screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  await openMainModeChoice(page);
+  await page.getByRole("button", { name: "Мультиплеер", exact: true }).click();
+  await page.getByRole("button", { name: "Назад" }).click();
+  await expect(page.getByRole("button", { name: "Один игрок", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Один игрок", exact: true }).click();
+  await page.getByRole("button", { name: "К управлению" }).click();
+  await expect(page.getByRole("heading", { name: "Управление" })).toBeVisible();
+  await page.getByRole("button", { name: "Назад" }).click();
+  await expect(page.getByRole("heading", { name: "Об игре" })).toBeVisible();
+  await expect(page.locator(".rules-screen-text")).toHaveCSS("font-size", /^(1[6-9]|[2-9][0-9])/);
 });

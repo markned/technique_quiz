@@ -19,9 +19,10 @@ function safeLocalStorage(): Pick<Storage, "getItem" | "setItem"> {
     const probe = "technique_quiz_storage_probe";
     storage.setItem(probe, "1");
     storage.removeItem(probe);
-    const simulation = import.meta.env.DEV
-      ? new URLSearchParams(window.location.search).get("simClient")
-      : null;
+    const simulation =
+      import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1"
+        ? new URLSearchParams(window.location.search).get("simClient")
+        : null;
     if (simulation)
       return {
         getItem: (key) => storage.getItem(`simulation:${simulation}:${key}`),
@@ -81,7 +82,7 @@ export function getKnownPlayerId(roomCode: RoomCode): PlayerId | undefined {
 }
 
 export function getSavedPlayerName(): string {
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1") {
     const params = new URLSearchParams(window.location.search);
     if (params.get("simClient") && params.get("simName")) return params.get("simName")!.slice(0, 24);
   }

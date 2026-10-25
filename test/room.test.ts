@@ -616,3 +616,82 @@ it("awards the exact freestyle match bonus using private lyrics after public red
   });
   expect(f.game.state.playersById[ids[0]!]!.score).toBe(2);
 });
+
+describe("manual pause and shared replay", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-25T12:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+  it("keeps manual pause through host reconnect and preserves answer time", async () => {
+    const f = await fixture();
+    await f.start();
+    const remaining = f.game.state.deadlineAt! - Date.now();
+    await f.send(f.host, { type: "host_pause", paused: true });
+    vi.setSystemTime(Date.now() + 2000);
+    await f.close(f.host);
+    const replacement = f.connect("replacement");
+    await f.hello(replacement);
+    expect(f.game.state.manualPaused).toBe(true);
+    expect(f.game.state.pausedAt).not.toBeNull();
+    await f.send(f.players[0]!, {
+      type: "player_quiz_answer",
+      turnId: f.game.state.turnId,
+      answer: { variant: "mc4", selectedIndex: 0 },
+    });
+    expect(Object.keys(f.game.state.quiz!.answers)).toHaveLength(0);
+    await f.send(replacement, { type: "host_pause", paused: false });
+    expect(f.game.state.deadlineAt! - Date.now()).toBe(remaining);
+  });
+  it("reserves one replay, ignores stale readiness, resumes timer after fragment", async () => {
+    const f = await fixture();
+    await f.start();
+    const remaining = f.game.state.deadlineAt! - Date.now();
+    await f.send(f.players[0]!, { type: "player_replay", turnId: f.game.state.turnId });
+    const replayId = f.game.state.replay!.id;
+    expect(f.game.state.deadlineAt).toBeNull();
+    await f.send(f.players[1]!, { type: "player_replay", turnId: f.game.state.turnId });
+    expect(f.game.state.replay!.id).toBe(replayId);
+    await f.send(f.host, { type: "host_media_ready", turnId: f.game.state.turnId, replayId: "stale" });
+    expect(f.game.state.replay!.startedAt).toBeNull();
+    await f.send(f.host, { type: "host_media_ready", turnId: f.game.state.turnId, replayId });
+    await f.due();
+    expect(f.game.state.replay).toBeNull();
+    expect(f.game.state.deadlineAt! - Date.now()).toBe(remaining);
+  });
+  it("accepts answers during replay and blocks replay from an answered player", async () => {
+    const f = await fixture();
+    await f.start();
+    const turnId = f.game.state.turnId;
+    await f.send(f.players[0]!, {
+      type: "player_quiz_answer",
+      turnId,
+      answer: { variant: "mc4", selectedIndex: 0 },
+    });
+    await f.send(f.players[0]!, { type: "player_replay", turnId });
+    expect(f.game.state.replay).toBeNull();
+    await f.send(f.players[1]!, { type: "player_replay", turnId });
+    for (const p of f.players.slice(1))
+      await f.send(p, { type: "player_quiz_answer", turnId, answer: { variant: "mc4", selectedIndex: 0 } });
+    expect(f.game.state.phase).toBe("round_results");
+    expect(f.game.state.replay).toBeNull();
+  });
+  it("allows leaving during pause and safely ends an under-quorum session", async () => {
+    const f = await fixture(true, undefined, 2);
+    await f.start();
+    await f.send(f.host, { type: "host_pause", paused: true });
+    await f.send(f.players[0]!, { type: "player_leave" });
+    expect(f.game.state.phase).toBe("finished");
+    expect(f.game.state.pausedAt).toBeNull();
+    expect(Object.keys(f.game.state.playersById)).toHaveLength(1);
+  });
+  it("returns rules to unlocked lobby without losing participants", async () => {
+    const f = await fixture();
+    await f.chooseMode();
+    await f.send(f.host, { type: "host_return_lobby" });
+    expect(f.game.state.phase).toBe("lobby");
+    expect(f.game.state.initialVote).toBeNull();
+    expect(f.game.state.rosterLocked).toBe(false);
+    expect(Object.keys(f.game.state.playersById)).toHaveLength(3);
+  });
+});

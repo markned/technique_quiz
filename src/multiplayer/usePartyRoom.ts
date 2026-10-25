@@ -1,3 +1,5 @@
+import { useAdmission } from "./useAdmission";
+import { rememberRoom } from "../navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PartySocket from "partysocket";
 import { useSimulation } from "../dev/useSimulation";
@@ -29,6 +31,7 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
     return getOrCreateHostToken(code);
   }, [code, role]);
   const playerToken = useMemo(() => getOrCreatePlayerToken(code), [code]);
+  const admission = useAdmission(code, role, clientId, enabled);
   const [left, setLeft] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [state, setState] = useState<PublicRoomState | null>(null);
@@ -47,13 +50,14 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
   }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !admission.ticket) return;
     const { host, protocol } = partySocketOptionsFromEnv();
     const socket = new PartySocket({
       host,
       protocol,
       party: "main",
       room: code,
+      query: { ticket: admission.ticket },
       connectionTimeout: 10_000,
       maxReconnectionDelay: 5_000,
     });
@@ -67,6 +71,7 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
     let pingSentAt = 0;
     let clockInitialized = false;
     let disposed = false;
+    let failures = 0;
 
     socket.addEventListener("open", () => {
       if (disposed) return;
@@ -95,6 +100,7 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
     socket.addEventListener("error", () => {
       if (disposed) return;
       authenticated.current = false;
+      if (++failures >= 5) admission.invalidate();
       setStatus("disconnected");
       setError("Не удалось подключиться к комнате. Восстанавливаем связь…");
     });
@@ -112,7 +118,10 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
           // Ignore the initial spectator snapshot until the server accepts our identity.
           if (message.you.role === "spectator" && message.state.phase !== "expired") return;
           authenticated.current = message.you.role !== "spectator";
+          failures = 0;
           setStatus("connected");
+          if (message.state.phase !== "expired")
+            rememberRoom({ code, role, expiresAt: message.state.expiresAt });
           if (!clockInitialized && message.serverNow) {
             serverOffset.current = message.serverNow - Date.now();
             clockInitialized = true;
@@ -125,6 +134,13 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
           setState({
             ...message.state,
             pausedAt: shift(message.state.pausedAt),
+            replay: message.state.replay
+              ? {
+                  ...message.state.replay,
+                  startedAt: shift(message.state.replay.startedAt),
+                  endsAt: shift(message.state.replay.endsAt),
+                }
+              : null,
             deadlineAt: shift(message.state.deadlineAt),
             transitionUntil: shift(message.state.transitionUntil),
             nextAdvanceAt: shift(message.state.nextAdvanceAt),
@@ -194,8 +210,8 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
         authenticated.current = false;
       }
     };
-  }, [clientId, code, enabled, hostToken, playerName, playerToken, role]);
+  }, [clientId, code, enabled, hostToken, playerName, playerToken, role, admission.ticket]);
 
   useSimulation(state, you?.playerId, role, send);
-  return { clientId, status, state, you, error, send, left };
+  return { admission, clientId, status, state, you, error, send, left };
 }
