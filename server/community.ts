@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { readRequestBody, RequestBodyError } from "./requestBody";
+import { FreeTierLimitError, readBudgetedMedia, writeBudgetedMedia } from "./freeTier";
 import { z } from "zod";
 import {
   CommunityRoundSchema,
@@ -88,7 +89,11 @@ export class CommunityStore extends DurableObject<CommunityEnv> {
       this.pending = result.catch(() => undefined);
       return await result;
     } catch (error) {
-      if (error instanceof ApiError || error instanceof RequestBodyError)
+      if (
+        error instanceof ApiError ||
+        error instanceof RequestBodyError ||
+        error instanceof FreeTierLimitError
+      )
         return Response.json({ error: error.message }, { status: error.status });
       if (error instanceof z.ZodError)
         return Response.json({ error: error.issues[0]?.message ?? "Проверь данные." }, { status: 400 });
@@ -217,7 +222,9 @@ export class CommunityStore extends DurableObject<CommunityEnv> {
         const user = await this.account(request);
         requireThat(user.id === record.ownerId || user.role === "moderator", 403, "Нет доступа к треку.");
       }
-      const object = await this.env.Media.get(mediaMatch[1]!, { range: request.headers });
+      const object = await readBudgetedMedia(this.ctx.storage, this.env.Media, mediaMatch[1]!, {
+        range: request.headers,
+      });
       requireThat(object, 404, "Трек не найден.");
       const headers = new Headers({
         "Content-Type": record.contentType,
@@ -295,7 +302,7 @@ export class CommunityStore extends DurableObject<CommunityEnv> {
                 : null;
       requireThat(contentType, 400, "Загрузи аудио MP3, M4A, OGG или WAV.");
       const mediaId = crypto.randomUUID();
-      await this.env.Media.put(mediaId, bytes, { httpMetadata: { contentType } });
+      await writeBudgetedMedia(this.ctx.storage, this.env.Media, mediaId, bytes, contentType);
       await this.ctx.storage.put(`media:${mediaId}`, {
         ownerId: user.id,
         public: false,

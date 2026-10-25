@@ -27,7 +27,8 @@ if (process.env.DEPLOY_CHECK_HEALTH === "1") {
     health.service !== "technique-quiz" ||
     health.ok !== true ||
     health.testMode !== false ||
-    health.appOrigin !== "https://technique.ink"
+    health.appOrigin !== "https://technique.ink" ||
+    health.freeTierGuard !== "r2-v1"
   )
     throw new Error(
       "Production Worker health check failed. Deploy the production Worker with APP_ORIGIN=https://technique.ink and TEST_MODE=false before publishing Pages.",

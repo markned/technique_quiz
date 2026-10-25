@@ -4,6 +4,7 @@ import type { ConnectionMeta } from "../src/multiplayer/types";
 
 import { CommunityStore, type CommunityEnv } from "../server/community";
 import type { Round } from "../src/types";
+import { FREE_TIER_LIMITS } from "../server/freeTier";
 export { CommunityStore };
 
 type Env = CommunityEnv & {
@@ -81,6 +82,8 @@ export default {
         service: "technique-quiz",
         testMode: env.TEST_MODE === "true",
         appOrigin: env.APP_ORIGIN,
+        freeTierGuard: "r2-v1",
+        mediaLimits: FREE_TIER_LIMITS,
       });
     if (path.startsWith("/api/")) {
       const origin = request.headers.get("Origin");
