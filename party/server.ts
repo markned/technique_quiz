@@ -122,7 +122,9 @@ const app = {
       return new Response("Invalid connection", { status: 400 });
     let bypass = localSecurityBypass(request, env);
     if (env.TEST_MODE === "true" && !bypass) {
+      const gate = await testGate(request, env.TEST_GATE_SECRET);
       if (
+        gate &&
         env.RequestLimit &&
         !(
           await env.RequestLimit.limit({
@@ -131,7 +133,6 @@ const app = {
         ).success
       )
         return new Response("Try later", { status: 429 });
-      const gate = await testGate(request, env.TEST_GATE_SECRET);
       if (gate) return gate;
       bypass = true;
     }
