@@ -9,6 +9,8 @@ function e2eRoomCode(prefix: string): string {
 async function joinPlayer(browser: Browser, code: string, name: string): Promise<Page> {
   const page = await browser.newPage();
   await page.goto(`/join/${code}`);
+  // Keep native click hit-testing while removing the decorative perpetual shake.
+  await page.addStyleTag({ content: ".quiz-option { animation: none !important; }" });
   await page.getByLabel("Имя").fill(name);
   await page.getByRole("button", { name: "Играть" }).click();
   await expect(
@@ -55,7 +57,7 @@ async function clickWrongMc(page: Page, correctPattern: RegExp): Promise<string>
   for (let i = 0; i < count; i += 1) {
     const text = (await buttons.nth(i).innerText()).trim();
     if (!correctPattern.test(text)) {
-      await buttons.nth(i).click({ force: true });
+      await buttons.nth(i).click();
       await page.getByRole("button", { name: "Подтвердить ответ" }).click();
       return text;
     }
@@ -127,8 +129,7 @@ test("multiplayer quiz supports joining, answering, scoring, leaderboard, and re
 
   await expect(alice.getByRole("button", { name: "Подтвердить ответ" })).toBeVisible({ timeout: 20_000 });
   const correct = /Откуда в жопе бриллианты/;
-  // These singleplayer-style options intentionally animate continuously.
-  await alice.getByRole("button", { name: correct }).click({ force: true });
+  await alice.getByRole("button", { name: correct }).click();
   await alice.getByRole("button", { name: "Подтвердить ответ" }).click();
   await clickWrongMc(bob, correct);
   await clickWrongMc(cara, correct);
@@ -159,7 +160,8 @@ test("multiplayer quiz supports joining, answering, scoring, leaderboard, and re
 test("multiplayer freestyle supports anonymous voting, original reveal, similarity bonus, and leaderboard", async ({
   browser,
 }) => {
-  const code = e2eRoomCode("F");
+  // E2EF is reserved for full-catalog simulator runs; this fixture starts with round 1.
+  const code = e2eRoomCode("S");
   const { host, alice, bob, cara } = await setupRoom(browser, code);
 
   await chooseInitialMode(host, alice, bob, "freestyle");
