@@ -36,3 +36,13 @@ export function resolveRoundBackgroundSources(
     videoStartSec: round?.backgroundVideo?.start ?? 0,
   };
 }
+
+/** Stable across devices, snapshots and remounts for a server-owned turn. */
+export function multiplayerRoundBackground(state: { code: string; turnId: string; round: Round | null }) {
+  let hash = 2166136261;
+  for (const character of `${state.code}:${state.turnId}`)
+    hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+  const photos = [...BACKGROUND_PHOTO_FILENAMES].sort();
+  const photo = photos.length ? photos[(hash >>> 0) % photos.length] : null;
+  return resolveRoundBackgroundSources(state.round, photo);
+}

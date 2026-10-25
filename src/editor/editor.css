@@ -668,3 +668,28 @@
 .editor-push-label {
   font-size: 0.88rem;
 }
+
+.editor-community-layout { display: grid; grid-template-columns: minmax(220px, 320px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.editor-community-layout aside ul { list-style: none; padding: 0; }
+.editor-community-layout aside li { margin: 8px 0; }
+.editor-community-layout aside button { white-space: normal; text-align: left; }
+.editor-community-layout fieldset { border: 0; padding: 0; min-width: 0; }
+.editor-community-layout label, .editor-app form label { display: grid; gap: 6px; margin: 12px 0; }
+.editor-community-layout input, .editor-community-layout textarea, .editor-app form input { max-width: 100%; box-sizing: border-box; }
+@media (max-width: 800px) { .editor-community-layout { grid-template-columns: 1fr; } }
+
+.editor-app { min-height: 100dvh; padding: 20px; max-width: 1440px; margin: 0 auto; font: 14px/1.5 system-ui, sans-serif; }
+.editor-app > .editor-panel { max-width: 600px; margin: 24px auto; }
+.editor-app .editor-header { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; padding: 0 0 16px; }
+.editor-app .editor-header h1 { margin: 0; font-size: 22px; }
+.editor-app .editor-panel { border: 1px solid #30394b; background: #101622; border-radius: 12px; padding: 20px; min-width: 0; }
+.editor-app button { border: 1px solid #536684; background: #1b2a42; color: #f8fbff; border-radius: 6px; padding: 8px 12px; cursor: pointer; margin: 4px 4px 4px 0; font: inherit; }
+.editor-app button:hover:not(:disabled) { background: #273d60; }
+.editor-app button:disabled { opacity: .5; cursor: default; }
+.editor-app button[aria-pressed="true"] { border-color: #7aa3ff; background: #253c62; }
+.editor-app input:not([type="range"]), .editor-app textarea, .editor-app select { background: #080d16; color: #f8fbff; border: 1px solid #536684; padding: 9px; border-radius: 6px; font: inherit; }
+.editor-app a { color: #9dbdff; }
+.editor-app fieldset { border: 0; padding: 0; min-width: 0; }
+.editor-app [role="alert"] { border-color: #ff8298; color: #ffc3ce; overflow-wrap: anywhere; }
+.editor-app .editor-actions { display: flex; flex-wrap: wrap; margin: 16px 0; }
+@media (max-width: 600px) { .editor-app { padding: 12px; } .editor-app .editor-panel { padding: 12px; } }

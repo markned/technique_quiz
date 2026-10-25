@@ -4,7 +4,7 @@ export const DEFAULT_QUIZ_SESSION_LENGTH = 14;
 export const FREESTYLE_SESSION_LENGTH = 8;
 
 /** Базовый URL статики (`import.meta.env.BASE_URL` из Vite). */
-const BASE = `${(import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/")}`;
+const BASE = `${(import.meta.env?.BASE_URL ?? "/").replace(/\/?$/, "/")}`;
 
 /** Путь к файлу с учётом base (работает на GitHub Pages) */
 export const assetUrl = (path: string) => BASE + (path.startsWith("/") ? path.slice(1) : path);

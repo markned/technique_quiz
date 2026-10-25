@@ -16,11 +16,20 @@ export const PlayerJoinMessageSchema = z.object({
   clientId,
   name,
   knownPlayerId: playerId.optional(),
+  playerToken: z.string().min(20).max(160),
 });
 
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   HostHelloMessageSchema,
+  z.object({ type: z.literal("host_media_failed"), turnId: z.string().min(1) }),
+  z.object({ type: z.literal("host_retry_media") }),
+  z.object({ type: z.literal("ping") }),
+  z.object({ type: z.literal("host_set_discord"), enabled: z.boolean() }),
+  z.object({ type: z.literal("host_media_ready"), turnId: z.string().min(1) }),
   PlayerJoinMessageSchema,
+  z.object({ type: z.literal("player_leave") }),
+  z.object({ type: z.literal("player_mode_vote"), mode: z.enum(["freestyle", "quiz"]) }),
+  z.object({ type: z.literal("player_final_vote"), mode: z.enum(["freestyle", "quiz"]) }),
   z.object({
     type: z.literal("host_start_mode_select"),
   }),
@@ -33,6 +42,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("host_media_checkpoint"),
+    turnId: z.string().min(1),
     checkpoint: z.enum(["fragment_stopped"]),
     roundId: z.number().int(),
   }),
@@ -45,6 +55,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("player_quiz_answer"),
+    turnId: z.string().min(1),
     answer: z.discriminatedUnion("variant", [
       z.object({
         variant: z.literal("mc4"),
@@ -58,10 +69,12 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("player_freestyle_submit"),
+    turnId: z.string().min(1),
     text: z.string().trim().min(1).max(280),
   }),
   z.object({
     type: z.literal("player_vote"),
+    turnId: z.string().min(1),
     submissionId: playerId,
   }),
 ]);
@@ -69,7 +82,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
 export function parseClientMessage(raw: string | ArrayBuffer): ClientMessage | null {
-  if (typeof raw !== "string") return null;
+  if (typeof raw !== "string" || raw.length > 4096) return null;
   try {
     return ClientMessageSchema.parse(JSON.parse(raw));
   } catch {

@@ -3,14 +3,15 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -26,9 +27,21 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm test
+      - run: npm run server:check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Validate production multiplayer configuration
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: node scripts/check-deploy-env.mjs
+        env:
+          VITE_MULTIPLAYER_SERVER_URL: ${{ vars.MULTIPLAYER_SERVER_URL }}
+          DEPLOY_CHECK_HEALTH: "1"
       - run: npm run build
+        env:
+          VITE_MULTIPLAYER_SERVER_URL: ${{ vars.MULTIPLAYER_SERVER_URL }}
       # Как upload-pages-artifact@v4, но с actions/upload-artifact@v7 (node24), без старого upload-artifact@4.x
       - name: Archive Pages artifact
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
           tar \
             --dereference --hard-dereference \
@@ -39,6 +52,7 @@ jobs:
             --exclude=".[^/]*" \
             .
       - uses: actions/upload-artifact@v7
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           name: github-pages
           path: ${{ runner.temp }}/artifact.tar
@@ -46,7 +60,11 @@ jobs:
           if-no-files-found: error
 
   deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
+    permissions:
+      pages: write
+      id-token: write
     runs-on: ubuntu-latest
     environment:
       name: github-pages

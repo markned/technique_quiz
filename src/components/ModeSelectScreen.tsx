@@ -9,6 +9,8 @@ import type { GameMode } from "../types";
 type ModeSelectScreenProps = {
   onSelectMode: (mode: GameMode) => void;
   quizEligibleCount: number;
+  multiplayer?: boolean;
+  connectedPlayers?: number;
 };
 
 type Tint = "green" | "red";
@@ -101,8 +103,13 @@ function ModeSelectPane({
   );
 }
 
-export function ModeSelectScreen({ onSelectMode, quizEligibleCount }: ModeSelectScreenProps) {
-  const quizDisabled = quizEligibleCount < 4;
+export function ModeSelectScreen({
+  onSelectMode,
+  quizEligibleCount,
+  multiplayer = false,
+  connectedPlayers = 0,
+}: ModeSelectScreenProps) {
+  const quizDisabled = quizEligibleCount < 4 || (multiplayer && connectedPlayers < 2);
   const demo = useModeSelectMobileDemo(quizDisabled);
 
   const shellClass = "mode-select-shell" + (demo.isMobileDemo ? " mode-select-shell--mobile-demo" : "");
@@ -115,7 +122,9 @@ export function ModeSelectScreen({ onSelectMode, quizEligibleCount }: ModeSelect
           videoSrc={MODE_SELECT_FREESTYLE_VIDEO}
           tint="green"
           title="Фристайл"
-          description="Продолжи строчки вслух"
+          disabled={multiplayer && connectedPlayers < 3}
+          disabledHint="Фристайл — от 3 игроков."
+          description={multiplayer ? "Напиши продолжение и проголосуй" : "Продолжи строчки вслух"}
           onSelect={() => onSelectMode("freestyle")}
           demoActive={demo.demoActiveFreestyle}
           onVideoEnded={demo.onDemoEndedFreestyle}
@@ -125,9 +134,13 @@ export function ModeSelectScreen({ onSelectMode, quizEligibleCount }: ModeSelect
           videoSrc={MODE_SELECT_QUIZ_VIDEO}
           tint="red"
           title="Викторина"
-          description="Выбери ответ"
+          description={multiplayer ? "Выбери ответ на своём устройстве" : "Выбери ответ"}
           disabled={quizDisabled}
-          disabledHint={`Нужно минимум 4 раунда с ответом хотя бы из одной строки (сейчас ${quizEligibleCount}).`}
+          disabledHint={
+            multiplayer && connectedPlayers < 2
+              ? "Викторина — от 2 игроков."
+              : `Нужно минимум 4 раунда с ответом хотя бы из одной строки (сейчас ${quizEligibleCount}).`
+          }
           onSelect={() => onSelectMode("quiz")}
           demoActive={demo.demoActiveQuiz}
           onVideoEnded={demo.onDemoEndedQuiz}

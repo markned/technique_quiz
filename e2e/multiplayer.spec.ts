@@ -32,6 +32,14 @@ async function setupRoom(browser: Browser, code: string) {
   return { host, alice, bob, cara };
 }
 
+async function chooseInitialMode(host: Page, alice: Page, bob: Page, mode: "quiz" | "freestyle") {
+  const label = mode === "quiz" ? "Викторина" : "Фристайл";
+  await expect(alice.getByRole("heading", { name: "Выбираем режим" })).toBeVisible();
+  await alice.getByRole("button", { name: label, exact: true }).click();
+  await bob.getByRole("button", { name: label, exact: true }).click();
+  await expect(host.getByRole("button", { name: "Начать игру" })).toBeVisible();
+}
+
 async function openMainModeChoice(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Начать" }).click();
@@ -41,12 +49,13 @@ async function openMainModeChoice(page: Page) {
 }
 
 async function clickWrongMc(page: Page, correctPattern: RegExp): Promise<string> {
-  const buttons = page.locator(".multiplayer-answer-grid button");
+  const buttons = page.locator(".quiz-options-grid button");
   const count = await buttons.count();
   for (let i = 0; i < count; i += 1) {
     const text = (await buttons.nth(i).innerText()).trim();
     if (!correctPattern.test(text)) {
       await buttons.nth(i).click();
+      await page.getByRole("button", { name: "Подтвердить ответ" }).click();
       return text;
     }
   }
@@ -112,12 +121,13 @@ test("multiplayer quiz supports joining, answering, scoring, leaderboard, and re
   const code = e2eRoomCode("Q");
   const { host, alice, bob, cara } = await setupRoom(browser, code);
 
-  await host.getByText("Викторина").click();
+  await chooseInitialMode(host, alice, bob, "quiz");
   await host.getByRole("button", { name: "Начать игру" }).click();
 
-  await expect(alice.getByText("Выбери ответ")).toBeVisible({ timeout: 20_000 });
+  await expect(alice.getByRole("button", { name: "Подтвердить ответ" })).toBeVisible({ timeout: 20_000 });
   const correct = /Откуда в жопе бриллианты/;
   await alice.getByRole("button", { name: correct }).click();
+  await alice.getByRole("button", { name: "Подтвердить ответ" }).click();
   await clickWrongMc(bob, correct);
   await clickWrongMc(cara, correct);
 
@@ -130,12 +140,15 @@ test("multiplayer quiz supports joining, answering, scoring, leaderboard, and re
   await alice.reload();
   await expect(
     alice
-      .getByText(/Сессия восстановлена|Результаты на экране|Ждём ведущий экран|Выбери ответ|Собери порядок/)
+      .getByText(
+        /Сессия восстановлена|Итоги раунда|Слушаем фрагмент|Следующий раунд|Ждём ведущий экран|Ответ принят|Подтвердить ответ/,
+      )
       .first(),
   ).toBeVisible({ timeout: 15_000 });
-  await expect(host.getByRole("heading", { name: "Победители" })).toBeVisible({ timeout: 35_000 });
-  await expect(host.getByText("Alice")).toBeVisible();
-  await host.getByRole("button", { name: "Сыграть ещё" }).click();
+  await expect(host.getByRole("heading", { name: "Итоги игры" })).toBeVisible({ timeout: 35_000 });
+  await expect(host.locator(".multiplayer-leaderboard").getByText("Alice")).toBeVisible();
+  await alice.getByRole("button", { name: "Сыграть ещё" }).click();
+  await bob.getByRole("button", { name: "Сыграть ещё" }).click();
   await expect(host.getByText(/Слушаем фрагмент|Следующий раунд|1\/3/).first()).toBeVisible({
     timeout: 15_000,
   });
@@ -147,7 +160,7 @@ test("multiplayer freestyle supports anonymous voting, original reveal, similari
   const code = e2eRoomCode("F");
   const { host, alice, bob, cara } = await setupRoom(browser, code);
 
-  await host.getByText("Фристайл").click();
+  await chooseInitialMode(host, alice, bob, "freestyle");
   await host.getByRole("button", { name: "Начать игру" }).click();
 
   await expect(alice.getByText("Продолжи текст")).toBeVisible({ timeout: 20_000 });
@@ -168,4 +181,112 @@ test("multiplayer freestyle supports anonymous voting, original reveal, similari
   await expect(host.getByText(/Откуда в жопе бриллианты/).first()).toBeVisible();
   await expect(host.getByText(/\+1 похожесть/)).toBeVisible();
   await expect(host.getByText(/победитель/)).toBeVisible();
+});
+
+test("a lost main screen pauses the game and a recovery link resumes it on another device", async ({
+  browser,
+}) => {
+  const code = e2eRoomCode("R");
+  const { host, alice, bob } = await setupRoom(browser, code);
+  const token = await host.evaluate(
+    (roomCode) => localStorage.getItem(`technique_quiz_multiplayer_host_token:${roomCode}`),
+    code,
+  );
+  await chooseInitialMode(host, alice, bob, "quiz");
+  await host.getByRole("button", { name: "Начать игру" }).click();
+  await expect(alice.getByRole("button", { name: "Подтвердить ответ" })).toBeVisible();
+  await host.close();
+  await expect(alice.getByRole("heading", { name: "Пауза — ждём главный экран" })).toBeVisible();
+  const replacement = await browser.newPage();
+  await replacement.goto(`/room/${code}/host#screen=${token}`);
+  await expect(alice.getByRole("button", { name: "Подтвердить ответ" })).toBeVisible();
+  await expect(replacement).not.toHaveURL(/#screen=/);
+});
+
+test("real music playback handles media errors and player refreshes", async ({ browser }) => {
+  const code = `N${Date.now().toString(36).slice(-5).toUpperCase()}`;
+  const host = await browser.newPage();
+  await host.addInitScript(() => {
+    const probe = { loads: 0, audio: null as HTMLMediaElement | null };
+    Object.defineProperty(window, "__musicProbe", { value: probe });
+    const load = HTMLMediaElement.prototype.load;
+    HTMLMediaElement.prototype.load = function () {
+      if (this.src.includes("/audio/music/")) {
+        probe.loads++;
+        probe.audio = this;
+      }
+      return load.call(this);
+    };
+  });
+  const supportsAac = await host.evaluate(
+    () => !!document.createElement("audio").canPlayType('audio/mp4; codecs="mp4a.40.2"'),
+  );
+  await host.goto(`/room/${code}/host`);
+  await expect(host.getByRole("heading", { name: code })).toBeVisible();
+  const alice = await joinPlayer(browser, code, "Alice");
+  const bob = await joinPlayer(browser, code, "Bob");
+  await joinPlayer(browser, code, "Cara");
+  await host.getByRole("button", { name: "К выбору режима" }).click();
+  await chooseInitialMode(host, alice, bob, "quiz");
+  await host.getByRole("button", { name: "Начать игру" }).click();
+  if (!supportsAac) {
+    // Chromium without proprietary codecs must fail visibly and pause the room.
+    // Run with PLAYWRIGHT_CHANNEL=chrome to exercise the original AAC playback.
+    await expect(
+      host.getByText("Не удалось воспроизвести музыку. Проверь звук и нажми «Повторить»."),
+    ).toBeVisible();
+    await expect(alice.getByRole("heading", { name: "Пауза — ждём главный экран" })).toBeVisible();
+    await expect(host.getByRole("button", { name: "Повторить", exact: true })).toBeVisible();
+    return;
+  }
+  const probe = () =>
+    host.evaluate(() => {
+      const data = (window as unknown as { __musicProbe: { loads: number; audio: HTMLMediaElement | null } })
+        .__musicProbe;
+      return {
+        loads: data.loads,
+        playing: !!data.audio && !data.audio.paused,
+        time: data.audio?.currentTime ?? 0,
+        error: data.audio?.error?.message,
+        readyState: data.audio?.readyState,
+        source: data.audio?.currentSrc,
+      };
+    });
+  await expect
+    .poll(async () => JSON.stringify(await probe()), { timeout: 20_000 })
+    .toContain('"playing":true');
+  const before = await probe();
+  await alice.reload();
+  await expect.poll(async () => (await probe()).time).toBeGreaterThan(before.time + 0.25);
+  expect((await probe()).loads).toBe(before.loads);
+});
+
+test("two players skip initial voting and cannot switch to freestyle", async ({ browser }) => {
+  const code = e2eRoomCode("D");
+  const host = await browser.newPage();
+  await host.goto(`/room/${code}/host`);
+  const alice = await joinPlayer(browser, code, "Alice");
+  await joinPlayer(browser, code, "Bob");
+  await host.getByRole("button", { name: "К выбору режима" }).click();
+  await expect(host.getByRole("button", { name: "Начать игру" })).toBeVisible();
+  await expect(alice.getByRole("heading", { name: "Выбираем режим" })).toHaveCount(0);
+  await host.getByRole("button", { name: "Начать игру" }).click();
+  await expect(host.getByRole("heading", { name: "Итоги игры" })).toBeVisible({ timeout: 35_000 });
+  await expect(alice.getByRole("button", { name: "Перейти во фристайл" })).toBeDisabled();
+});
+
+test("a new player joins through the home page using a room code", async ({ browser }) => {
+  const code = e2eRoomCode("H");
+  const host = await browser.newPage();
+  await host.goto(`/room/${code}/host`);
+  await expect(host.getByRole("heading", { name: code })).toBeVisible();
+  const player = await browser.newPage();
+  await openMainModeChoice(player);
+  await player.getByRole("button", { name: "Мультиплеер" }).click();
+  await player.getByLabel("Код комнаты").fill(code);
+  await player.getByRole("button", { name: "Войти по коду" }).click();
+  await player.getByLabel("Имя").fill("Fresh player");
+  await player.getByRole("button", { name: "Играть", exact: true }).click();
+  await expect(host.getByText("Fresh player")).toBeVisible();
+  await expect(player.getByRole("heading", { name: "Ждём ведущий экран" })).toBeVisible();
 });

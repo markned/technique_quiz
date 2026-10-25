@@ -1,0 +1,66 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "technique-quiz",
+  "main": "party/server.ts",
+  "compatibility_date": "2026-10-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "Main",
+        "class_name": "TechniqueQuizRoom",
+      },
+      {
+        "name": "Community",
+        "class_name": "CommunityStore",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["TechniqueQuizRoom"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["CommunityStore"],
+    },
+  ],
+  "vars": {
+    "TEST_MODE": "false",
+    "APP_ORIGIN": "https://technique.ink",
+  },
+  "env": {
+    "test": {
+      "name": "technique-quiz-test",
+      "vars": {
+        "TEST_MODE": "true",
+        "APP_ORIGIN": "http://localhost:18768",
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "Main",
+            "class_name": "TechniqueQuizRoom",
+          },
+          {
+            "name": "Community",
+            "class_name": "CommunityStore",
+          },
+        ],
+      },
+      "r2_buckets": [
+        {
+          "binding": "Media",
+          "bucket_name": "technique-quiz-media-test",
+        },
+      ],
+    },
+  },
+  "r2_buckets": [
+    {
+      "binding": "Media",
+      "bucket_name": "technique-quiz-media",
+    },
+  ],
+}

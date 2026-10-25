@@ -1,110 +1,201 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PartySocket from "partysocket";
+import { useSimulation } from "../dev/useSimulation";
 import type { ClientMessage } from "./messages";
 import type { PublicRoomState, RoomCode, ServerMessage } from "./types";
-import { getKnownPlayerId, getOrCreateClientId, getOrCreateHostToken, rememberPlayerId } from "./identity";
+import {
+  adoptHostToken,
+  getKnownPlayerId,
+  getOrCreateClientId,
+  getOrCreateHostToken,
+  getOrCreatePlayerToken,
+  rememberPlayerId,
+} from "./identity";
 import { partySocketOptionsFromEnv } from "./env";
-
-type Role = "host" | "player";
 
 type UsePartyRoomOptions = {
   code: RoomCode;
-  role: Role;
+  role: "host" | "player";
   playerName?: string;
   enabled?: boolean;
 };
-
 type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 export function usePartyRoom({ code, role, playerName, enabled = true }: UsePartyRoomOptions) {
   const clientId = useMemo(() => getOrCreateClientId(), []);
-  const hostToken = useMemo(() => (role === "host" ? getOrCreateHostToken(code) : null), [code, role]);
+  const hostToken = useMemo(() => {
+    if (role !== "host") return null;
+    adoptHostToken(code);
+    return getOrCreateHostToken(code);
+  }, [code, role]);
+  const playerToken = useMemo(() => getOrCreatePlayerToken(code), [code]);
+  const [left, setLeft] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [state, setState] = useState<PublicRoomState | null>(null);
   const [you, setYou] = useState<Extract<ServerMessage, { type: "snapshot" }>["you"] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<PartySocket | null>(null);
-  const joinedRef = useRef<string>("");
+  const authenticated = useRef(false);
+  const serverOffset = useRef(0);
 
   const send = useCallback((message: ClientMessage) => {
     const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !authenticated.current) return false;
+    // Never queue game actions across disconnects: they may belong to a finished round.
     socket.send(JSON.stringify(message));
     return true;
   }, []);
 
-  const sendHello = useCallback(() => {
-    if (role === "host" && hostToken) {
-      send({ type: "host_hello", clientId, hostToken });
-      return;
-    }
-    const name = playerName?.trim();
-    if (!name) return;
-    const joinKey = `${code}:${name}`;
-    if (joinedRef.current === joinKey) return;
-    joinedRef.current = joinKey;
-    send({
-      type: "player_join",
-      clientId,
-      name,
-      knownPlayerId: getKnownPlayerId(code),
-    });
-  }, [clientId, code, hostToken, playerName, role, send]);
-
   useEffect(() => {
-    if (!enabled) return undefined;
+    if (!enabled) return;
     const { host, protocol } = partySocketOptionsFromEnv();
     const socket = new PartySocket({
       host,
       protocol,
       party: "main",
       room: code,
+      connectionTimeout: 10_000,
+      maxReconnectionDelay: 5_000,
     });
     socketRef.current = socket;
+    authenticated.current = false;
     setStatus("connecting");
+    setState(null);
+    setYou(null);
     setError(null);
+    let lastReceivedAt = Date.now();
+    let pingSentAt = 0;
+    let clockInitialized = false;
+    let disposed = false;
 
     socket.addEventListener("open", () => {
-      setStatus("connected");
-      sendHello();
+      if (disposed) return;
+      authenticated.current = false;
+      lastReceivedAt = Date.now();
+      setStatus("connecting");
+      const hello: ClientMessage | null =
+        role === "host" && hostToken
+          ? { type: "host_hello", clientId, hostToken }
+          : playerName?.trim()
+            ? {
+                type: "player_join",
+                clientId,
+                name: playerName.trim(),
+                knownPlayerId: getKnownPlayerId(code),
+                playerToken,
+              }
+            : null;
+      if (hello) socket.send(JSON.stringify(hello));
     });
-    socket.addEventListener("close", () => setStatus("disconnected"));
-    socket.addEventListener("error", () => {
+    socket.addEventListener("close", () => {
+      if (disposed) return;
+      authenticated.current = false;
       setStatus("disconnected");
-      setError("Не удалось подключиться к комнате. Проверь PartyKit сервер.");
+    });
+    socket.addEventListener("error", () => {
+      if (disposed) return;
+      authenticated.current = false;
+      setStatus("disconnected");
+      setError("Не удалось подключиться к комнате. Восстанавливаем связь…");
     });
     socket.addEventListener("message", (event) => {
+      if (disposed) return;
       try {
         const message = JSON.parse(String(event.data)) as ServerMessage;
+        lastReceivedAt = Date.now();
+        if (message.type === "player_left") {
+          setLeft(true);
+          socket.close();
+          return;
+        }
         if (message.type === "snapshot") {
-          setState(message.state);
-          setYou(message.you);
+          // Ignore the initial spectator snapshot until the server accepts our identity.
+          if (message.you.role === "spectator" && message.state.phase !== "expired") return;
+          authenticated.current = message.you.role !== "spectator";
+          setStatus("connected");
+          if (!clockInitialized && message.serverNow) {
+            serverOffset.current = message.serverNow - Date.now();
+            clockInitialized = true;
+          }
+          if (pingSentAt && message.serverNow) {
+            serverOffset.current = message.serverNow - (pingSentAt + Date.now()) / 2;
+            pingSentAt = 0;
+          }
+          const shift = (value: number | null) => (value == null ? null : value - serverOffset.current);
+          setState({
+            ...message.state,
+            pausedAt: shift(message.state.pausedAt),
+            deadlineAt: shift(message.state.deadlineAt),
+            transitionUntil: shift(message.state.transitionUntil),
+            nextAdvanceAt: shift(message.state.nextAdvanceAt),
+            playingStartedAt: shift(message.state.playingStartedAt),
+            backgroundStartedAt: shift(message.state.backgroundStartedAt),
+            initialVote: message.state.initialVote
+              ? {
+                  ...message.state.initialVote,
+                  decision: message.state.initialVote.decision
+                    ? {
+                        ...message.state.initialVote.decision,
+                        startsAt: shift(message.state.initialVote.decision.startsAt)!,
+                      }
+                    : null,
+                }
+              : null,
+            finalVote: message.state.finalVote
+              ? {
+                  ...message.state.finalVote,
+                  decision: message.state.finalVote.decision
+                    ? {
+                        ...message.state.finalVote.decision,
+                        startsAt: shift(message.state.finalVote.decision.startsAt)!,
+                      }
+                    : null,
+                }
+              : null,
+          });
+          setYou((previous) => ({
+            ...message.you,
+            reconnected: message.you.reconnected || !!previous?.reconnected,
+          }));
           if (message.you.playerId) rememberPlayerId(code, message.you.playerId);
           setError(null);
-        } else {
+        } else if (message.type === "error") {
           setError(message.message);
+          if (
+            ["session_replaced", "host_conflict", "room_expired", "invalid_room", "room_full"].includes(
+              message.code,
+            )
+          ) {
+            authenticated.current = false;
+            socket.close();
+          }
         }
       } catch {
         setError("Сервер прислал нечитаемое сообщение.");
       }
     });
-
+    const heartbeat = window.setInterval(() => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - lastReceivedAt > 30_000) {
+        authenticated.current = false;
+        setStatus("disconnected");
+        socket.reconnect();
+      } else if (authenticated.current) {
+        pingSentAt = Date.now();
+        socket.send(JSON.stringify({ type: "ping" }));
+      }
+    }, 10_000);
     return () => {
+      disposed = true;
+      window.clearInterval(heartbeat);
       socket.close();
-      if (socketRef.current === socket) socketRef.current = null;
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+        authenticated.current = false;
+      }
     };
-  }, [code, enabled, sendHello]);
+  }, [clientId, code, enabled, hostToken, playerName, playerToken, role]);
 
-  useEffect(() => {
-    if (status === "connected") sendHello();
-  }, [sendHello, status]);
-
-  return {
-    clientId,
-    status,
-    state,
-    you,
-    error,
-    send,
-  };
+  useSimulation(state, you?.playerId, role, send);
+  return { clientId, status, state, you, error, send, left };
 }

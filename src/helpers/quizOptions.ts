@@ -40,15 +40,6 @@ export function buildQuizOptionsOneLine(
     wrong.push(t);
   }
 
-  const fb = shuffle([...wrongCandidates]);
-  let fi = 0;
-  while (wrong.length < 3 && fb.length > 0) {
-    const t = fb[fi % fb.length]!;
-    fi += 1;
-    if (t === correct || prior.has(t)) continue;
-    if (!wrong.includes(t)) wrong.push(t);
-  }
-
   while (wrong.length < 3) {
     wrong.push(wrong[wrong.length - 1] ?? "…");
   }

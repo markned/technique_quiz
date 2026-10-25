@@ -37,6 +37,9 @@ type QuizScreenProps = {
   onConfirmQuiz: () => void;
   onNextRound: () => void;
   controlsSlot?: ReactNode;
+  displayOnly?: boolean;
+  resultSlot?: ReactNode;
+  timerShowsRemaining?: boolean;
 };
 
 export const QuizScreen = memo(function QuizScreen(props: QuizScreenProps) {
@@ -65,6 +68,9 @@ export const QuizScreen = memo(function QuizScreen(props: QuizScreenProps) {
     onConfirmQuiz,
     onNextRound,
     controlsSlot,
+    displayOnly = false,
+    resultSlot,
+    timerShowsRemaining = false,
   } = props;
 
   const revealVisible = roundState === "reveal";
@@ -99,14 +105,19 @@ export const QuizScreen = memo(function QuizScreen(props: QuizScreenProps) {
       <header className="quiz-header">
         <span className="quiz-round-counter">
           {counterLabel}
-          {gameMode === "quiz" ? (
+          {gameMode === "quiz" && !displayOnly ? (
             <span className="quiz-score-pill" aria-live="polite">
               · ✓ {quizScore}
             </span>
           ) : null}
         </span>
         <div className="quiz-header-timer">
-          <Timer seconds={timerSeconds} isActive={timerActive} totalSeconds={totalSeconds} />
+          <Timer
+            remaining={timerShowsRemaining}
+            seconds={timerSeconds}
+            isActive={timerActive}
+            totalSeconds={totalSeconds}
+          />
         </div>
       </header>
       <div className="quiz-content">
@@ -115,7 +126,10 @@ export const QuizScreen = memo(function QuizScreen(props: QuizScreenProps) {
             {showLyrics ? (
               <>
                 <h2 className="quiz-title">{round.title}</h2>
-                <QuizModeHint variant={quizUiVariant} visible={quizHintVisible} />
+                <QuizModeHint variant={quizUiVariant} visible={quizHintVisible && !displayOnly} />
+                {displayOnly && roundState === "paused_for_guess" ? (
+                  <p className="quiz-mode-hint__text">Ответы принимаются на устройствах игроков</p>
+                ) : null}
                 <LyricsPanel hintLines={hintLines} visibleCount={visibleHintLineCount} />
                 <QuizOrderLines
                   roundState={roundState}
@@ -123,9 +137,11 @@ export const QuizScreen = memo(function QuizScreen(props: QuizScreenProps) {
                   lineText={lineText}
                   correctIds={round.revealLineIds}
                   disabled={gamePaused}
+                  displayOnly={displayOnly}
                   onReorder={onReorderQuizOrder}
                 />
                 <QuizOptionsGrid
+                  displayOnly={displayOnly}
                   options={quizOptions}
                   selectedIndex={selectedQuizIndex}
                   correctIndex={quizCorrectIndex}
@@ -134,6 +150,7 @@ export const QuizScreen = memo(function QuizScreen(props: QuizScreenProps) {
                   disabled={gamePaused}
                 />
                 <RevealPanel revealLines={revealLines} visible={revealVisible} />
+                {resultSlot}
               </>
             ) : null}
           </div>
