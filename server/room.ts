@@ -788,7 +788,7 @@ export class QuizRoom {
     this.state.phase = "round_results";
     this.state.deadlineAt = null;
     this.state.nextAdvanceAt =
-      nowMs() + (this.isTest() ? 1_200 : MULTIPLAYER_ROUND_RESULTS_MS + (this.state.discord ? 3_000 : 0));
+      nowMs() + (this.isTest() ? 3_000 : MULTIPLAYER_ROUND_RESULTS_MS + (this.state.discord ? 3_000 : 0));
     this.touch();
     await this.persistAndBroadcast();
   }
@@ -849,7 +849,7 @@ export class QuizRoom {
     this.state.phase = "round_results";
     this.state.deadlineAt = null;
     this.state.nextAdvanceAt =
-      nowMs() + (this.isTest() ? 1_200 : MULTIPLAYER_ROUND_RESULTS_MS + (this.state.discord ? 3_000 : 0));
+      nowMs() + (this.isTest() ? 3_000 : MULTIPLAYER_ROUND_RESULTS_MS + (this.state.discord ? 3_000 : 0));
     this.touch();
     await this.persistAndBroadcast();
   }

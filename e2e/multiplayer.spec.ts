@@ -54,7 +54,7 @@ async function clickWrongMc(page: Page, correctPattern: RegExp): Promise<string>
   for (let i = 0; i < count; i += 1) {
     const text = (await buttons.nth(i).innerText()).trim();
     if (!correctPattern.test(text)) {
-      await buttons.nth(i).click();
+      await buttons.nth(i).click({ force: true });
       await page.getByRole("button", { name: "Подтвердить ответ" }).click();
       return text;
     }
@@ -126,7 +126,8 @@ test("multiplayer quiz supports joining, answering, scoring, leaderboard, and re
 
   await expect(alice.getByRole("button", { name: "Подтвердить ответ" })).toBeVisible({ timeout: 20_000 });
   const correct = /Откуда в жопе бриллианты/;
-  await alice.getByRole("button", { name: correct }).click();
+  // These singleplayer-style options intentionally animate continuously.
+  await alice.getByRole("button", { name: correct }).click({ force: true });
   await alice.getByRole("button", { name: "Подтвердить ответ" }).click();
   await clickWrongMc(bob, correct);
   await clickWrongMc(cara, correct);

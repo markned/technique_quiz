@@ -30,6 +30,14 @@ jobs:
       - run: npm run server:check
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Retain browser diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-diagnostics
+          path: test-results
+          retention-days: 3
+          if-no-files-found: ignore
       - name: Validate production multiplayer configuration
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: node scripts/check-deploy-env.mjs
