@@ -29,18 +29,23 @@ export function loadScript() {
   }));
 }
 const storageKey = (code: string, role: string) => `technique_admission:${role}:${code}`;
-function saved(code: string, role: string) {
+function saved(code: string, role: string, clientId: string) {
   try {
     const value = localStorage.getItem(storageKey(code, role));
     if (!value) return "";
     const payload = JSON.parse(atob(value.split(".")[0]!.replace(/-/g, "+").replace(/_/g, "/")));
-    return payload.expiresAt > Date.now() + 60_000 ? value : "";
+    return payload.clientId === clientId &&
+      payload.room === code &&
+      payload.role === role &&
+      payload.expiresAt > Date.now() + 60_000
+      ? value
+      : "";
   } catch {
     return "";
   }
 }
 export function useAdmission(code: string, role: "host" | "player", clientId: string, enabled: boolean) {
-  const [ticket, setTicket] = useState(() => saved(code, role));
+  const [ticket, setTicket] = useState(() => saved(code, role, clientId));
   const [sitekey, setSitekey] = useState("");
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);

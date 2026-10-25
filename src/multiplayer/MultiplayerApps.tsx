@@ -1268,6 +1268,7 @@ function PlayerFreestyleSubmit({
           <LyricsPanel hintLines={hintLines} visibleCount={visible} />
           <textarea
             className="multiplayer-textarea"
+            disabled={!!state.pausedAt}
             value={text}
             onChange={(event) => setText(event.target.value)}
             autoFocus

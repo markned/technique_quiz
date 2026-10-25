@@ -695,3 +695,22 @@ describe("manual pause and shared replay", () => {
     expect(Object.keys(f.game.state.playersById)).toHaveLength(3);
   });
 });
+
+it("ends replay when the only unanswered player leaves and quiz quorum survives", async () => {
+  const f = await fixture();
+  await f.start();
+  const turnId = f.game.state.turnId;
+  await f.send(f.players[2]!, { type: "player_replay", turnId });
+  for (const p of f.players.slice(0, 2))
+    await f.send(p, { type: "player_quiz_answer", turnId, answer: { variant: "mc4", selectedIndex: 0 } });
+  await f.send(f.players[2]!, { type: "player_leave" });
+  expect(f.game.state.phase).toBe("round_results");
+  expect(f.game.state.replay).toBeNull();
+});
+
+it("returns to lobby if a rules-stage departure removes the minimum roster", async () => {
+  const f = await fixture(true, undefined, 2);
+  await f.chooseMode();
+  await f.send(f.players[0]!, { type: "player_leave" });
+  expect(f.game.state).toMatchObject({ phase: "lobby", rosterLocked: false, mode: null });
+});

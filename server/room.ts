@@ -589,6 +589,38 @@ export class QuizRoom {
         await this.finishGame();
         return;
       }
+      if (
+        this.state.phase === "rules" &&
+        activePlayers(this.state).length < minimumPlayersForMode(this.state.mode)
+      ) {
+        this.state.phase = "lobby";
+        this.state.mode = null;
+        this.state.initialVote = null;
+        this.state.rosterLocked = false;
+        this.state.nextAdvanceAt = null;
+      }
+      if (!this.state.pausedAt) {
+        if (
+          this.state.phase === "quiz_answering" &&
+          this.state.quiz &&
+          this.allConnectedPlayersDone(this.state.quiz.answeredPlayerIds)
+        ) {
+          await this.finalizeQuizRound();
+          return;
+        }
+        if (
+          this.state.phase === "freestyle_submitting" &&
+          this.state.freestyle &&
+          this.allConnectedPlayersDone(this.state.freestyle.submittedPlayerIds)
+        ) {
+          await this.enterFreestyleVoting();
+          return;
+        }
+        if (this.state.phase === "freestyle_voting" && this.allEligibleVotersDone()) {
+          await this.finalizeFreestyleRound();
+          return;
+        }
+      }
       this.resolveFinalVotes();
       this.touch();
       await this.persistAndBroadcast();

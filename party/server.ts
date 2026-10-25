@@ -92,10 +92,16 @@ export class TechniqueQuizRoom extends Server<Env> {
     });
   }
   onClose(connection: Connection<ConnectionMeta>) {
-    return this.run(() => this.game.onClose(connection as RoomConnection));
+    return this.run(async () => {
+      await this.ctx.storage.delete(`socket-rate:${connection.id}`);
+      await this.game.onClose(connection as RoomConnection);
+    });
   }
   onError(connection: Connection<ConnectionMeta>) {
-    return this.run(() => this.game.onError(connection as RoomConnection));
+    return this.run(async () => {
+      await this.ctx.storage.delete(`socket-rate:${connection.id}`);
+      await this.game.onError(connection as RoomConnection);
+    });
   }
   onAlarm() {
     return this.run(() => this.game.onAlarm());
