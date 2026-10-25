@@ -5,6 +5,7 @@ import type { QuizUiVariant } from "../helpers/quizOptions";
 import type { GameMode } from "../types";
 
 type GamePauseToggleProps = {
+  restartLabel?: string;
   paused: boolean;
   disabled: boolean;
   onToggle: () => void;
@@ -63,6 +64,7 @@ function PauseHintsPanel({
 }
 
 export function GamePauseToggle({
+  restartLabel = "К режимам",
   paused,
   disabled,
   onToggle,
@@ -107,7 +109,7 @@ export function GamePauseToggle({
                 className="game-pause-menu-btn game-pause-menu-btn--secondary"
                 onClick={onReturnToModeSelectRequest}
               >
-                К режимам
+                {restartLabel}
               </button>
               <button type="button" className="game-pause-menu-btn" onClick={onExitToStart}>
                 Выйти

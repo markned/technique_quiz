@@ -8,7 +8,10 @@ registerGlobalAudioUnlock();
 
 async function bootstrap() {
   const root = document.getElementById("root")!;
-  if (import.meta.env.DEV && window.location.pathname === "/simulate") {
+  if (
+    (import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1") &&
+    window.location.pathname === "/simulate"
+  ) {
     const { MultiplayerSimulation } = await import("./dev/MultiplayerSimulation");
     ReactDOM.createRoot(root).render(<MultiplayerSimulation />);
   } else if (/\/community\/?$/.test(window.location.pathname)) {
@@ -21,7 +24,10 @@ async function bootstrap() {
         </ErrorBoundary>
       </React.StrictMode>,
     );
-  } else if (import.meta.env.DEV && /\/editor\/?$/.test(window.location.pathname)) {
+  } else if (
+    (import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1") &&
+    /\/editor\/?$/.test(window.location.pathname)
+  ) {
     sessionStorage.removeItem("technique_quiz_preview_return");
     const { RoundEditorApp } = await import("./editor/RoundEditorApp");
     await import("./editor/editor.css");

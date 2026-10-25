@@ -1,3 +1,7 @@
+import { AdmissionPanel } from "./admission";
+import { forgetRoom } from "../navigation";
+import { RoomMenu } from "./RoomMenu";
+import { LyricsPanel } from "../components/LyricsPanel";
 import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
 import { minimumPlayersForMode } from "./types";
 import type { ClientMessage } from "./messages";
@@ -37,8 +41,9 @@ function roomTimer(state: PublicRoomState) {
       : (state.answerSeconds ??
         getGuessSeconds(state.quiz?.answerLineCount ?? round?.revealLineIds.length ?? 1) +
           (state.discord ? 15 : 0));
-  const seconds =
-    state.deadlineAt === null
+  const seconds = state.replay
+    ? Math.ceil(state.replay.remainingMs / 1000)
+    : state.deadlineAt === null
       ? total
       : Math.min(total, Math.max(0, Math.ceil((state.deadlineAt - (state.pausedAt ?? Date.now())) / 1000)));
   return { total, seconds };
@@ -52,6 +57,60 @@ function useRoomTimer(state: PublicRoomState) {
     return () => window.clearInterval(interval);
   }, [state.deadlineAt, state.pausedAt]);
   return roomTimer(state);
+}
+
+function useSharedHintCount(state: PublicRoomState) {
+  const [now, tick] = useState(Date.now);
+  useEffect(() => {
+    if (state.pausedAt || (!state.replay && state.phase !== "playing")) return;
+    const timer = window.setInterval(() => tick(Date.now()), 80);
+    return () => window.clearInterval(timer);
+  }, [state.pausedAt, state.phase, state.replay?.id]);
+  const round = state.round ?? roundById(state.currentRoundId);
+  if (!round) return 0;
+  if (!state.replay && state.phase !== "playing") return round.hintLineIds.length;
+  const start = state.replay ? state.replay.startedAt : state.playingStartedAt;
+  if (start === null) return 0;
+  return visibleHintCountAtTime(
+    round.start + Math.max(0, ((state.pausedAt ?? now) - start) / 1000),
+    round,
+    round.hintLineIds.length,
+  );
+}
+
+function ReplayButton({
+  state,
+  playerId,
+  send,
+}: {
+  state: PublicRoomState;
+  playerId: string;
+  send: (message: ClientMessage) => boolean;
+}) {
+  const [now, tick] = useState(Date.now);
+  useEffect(() => {
+    if (!state.replay || state.pausedAt) return;
+    const t = setInterval(() => tick(Date.now()), 200);
+    return () => clearInterval(t);
+  }, [state.replay, state.pausedAt]);
+  const done =
+    state.phase === "quiz_answering"
+      ? state.quiz?.answeredPlayerIds.includes(playerId)
+      : state.freestyle?.submittedPlayerIds.includes(playerId);
+  if (!["quiz_answering", "freestyle_submitting"].includes(state.phase) || done) return null;
+  const seconds = state.replay?.endsAt
+    ? Math.max(0, Math.ceil((state.replay.endsAt - (state.pausedAt ?? now)) / 1000))
+    : 0;
+  return (
+    <button
+      type="button"
+      className="btn multiplayer-replay"
+      disabled={!!state.replay || !!state.pausedAt}
+      onClick={() => send({ type: "player_replay", turnId: state.turnId })}
+    >
+      {state.replay ? (seconds ? `Повтор · ${seconds} с` : "Готовим повтор…") : "↻ Повторить фрагмент"}
+    </button>
+  );
 }
 
 function playerStatus(state: PublicRoomState, playerId: string) {
@@ -501,13 +560,14 @@ function useHostPlayback(state: PublicRoomState, send: (message: ClientMessage) 
   const snapshot = useRef(state);
   snapshot.current = state;
   const { phase, turnId, pausedAt } = state;
+  const replayId = state.replay?.id ?? null;
 
   useEffect(() => () => playerRef.current?.destroy?.(), []);
 
   useEffect(() => {
     const current = snapshot.current;
     const round = current.round ?? roundById(current.currentRoundId);
-    if (!round || pausedAt || !["playing", "round_results"].includes(phase)) {
+    if (!round || pausedAt || (!replayId && !["playing", "round_results"].includes(phase))) {
       playerRef.current?.pause();
       if (phase === "transition") setVisibleHintLineCount(0);
       return;
@@ -516,10 +576,13 @@ function useHostPlayback(state: PublicRoomState, send: (message: ClientMessage) 
     let raf: number | undefined;
     const player = (playerRef.current ??= createPlayer());
     const start = async () => {
-      if (current.code.startsWith("E2E") && import.meta.env.DEV) {
-        if (phase === "playing") {
+      if (
+        current.code.startsWith("E2E") &&
+        (import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1")
+      ) {
+        if (phase === "playing" || replayId) {
           setVisibleHintLineCount(round.hintLineIds.length);
-          send({ type: "host_media_ready", turnId });
+          send({ type: "host_media_ready", turnId, replayId: replayId ?? undefined });
         }
         return;
       }
@@ -528,8 +591,8 @@ function useHostPlayback(state: PublicRoomState, send: (message: ClientMessage) 
         attempt > 0 ? `${source}${source.includes("?") ? "&" : "?"}retry=${attempt}` : source,
       );
       if (cancelled) return;
-      const elapsed =
-        current.playingStartedAt === null ? 0 : Math.max(0, (Date.now() - current.playingStartedAt) / 1000);
+      const startedAt = replayId ? current.replay?.startedAt : current.playingStartedAt;
+      const elapsed = startedAt == null ? 0 : Math.max(0, (Date.now() - startedAt) / 1000);
       const stopAt = fragmentStopTimeSec(round.end);
       await player.seekToAsync(phase === "round_results" ? stopAt : Math.min(stopAt, round.start + elapsed));
       if (cancelled) return;
@@ -542,7 +605,7 @@ function useHostPlayback(state: PublicRoomState, send: (message: ClientMessage) 
       }
       setPlaybackError(null);
       if (phase === "round_results") return;
-      send({ type: "host_media_ready", turnId });
+      send({ type: "host_media_ready", turnId, replayId: replayId ?? undefined });
       let lastTime = player.getCurrentTime();
       let lastProgressAt = Date.now();
       const monitor = () => {
@@ -580,7 +643,7 @@ function useHostPlayback(state: PublicRoomState, send: (message: ClientMessage) 
       player.pause();
     };
     // A player joining, answering or sending a heartbeat must not restart audio.
-  }, [phase, turnId, pausedAt, attempt, send]);
+  }, [phase, turnId, pausedAt, attempt, send, replayId]);
 
   return {
     visibleHintLineCount,
@@ -597,7 +660,8 @@ function useHostPlayback(state: PublicRoomState, send: (message: ClientMessage) 
 
 function HostGame({ state, send }: { state: PublicRoomState; send: (message: ClientMessage) => boolean }) {
   const round = state.round ?? roundById(state.currentRoundId);
-  const { visibleHintLineCount, timerSeconds, playbackError, retryPlayback } = useHostPlayback(state, send);
+  const { timerSeconds, playbackError, retryPlayback } = useHostPlayback(state, send);
+  const visibleHintLineCount = useSharedHintCount(state);
   const background = multiplayerRoundBackground({ ...state, round });
   if (!round) return <FinalLeaderboard state={state} send={send} />;
 
@@ -646,7 +710,7 @@ function HostGame({ state, send }: { state: PublicRoomState; send: (message: Cli
           onSelectQuizOption={() => {}}
           hintLines={hintLines}
           revealLines={revealLines}
-          visibleHintLineCount={state.phase === "playing" ? visibleHintLineCount : hintLines.length}
+          visibleHintLineCount={visibleHintLineCount}
           timerSeconds={timerSeconds}
           totalSeconds={totalSeconds}
           gamePaused={!!state.pausedAt}
@@ -658,7 +722,7 @@ function HostGame({ state, send }: { state: PublicRoomState; send: (message: Cli
           resultSlot={<ResultOverlay state={state} />}
         />
       </div>
-      {playbackError || state.pausedAt ? (
+      {playbackError || (state.pausedAt && !state.manualPaused) ? (
         <aside className="multiplayer-toast" role="alert">
           <p>{playbackError ?? "Музыка не запустилась. Игра приостановлена."}</p>
           <button type="button" className="btn" onClick={retryPlayback}>
@@ -871,7 +935,9 @@ function MultiplayerHostRoom({ code }: { code: RoomCode }) {
   const room = usePartyRoom({ code, role: "host" });
   const state = room.state;
   let content: ReactNode;
-  if (!state) {
+  if (!room.admission.ticket) {
+    content = <AdmissionPanel admission={room.admission} />;
+  } else if (!state) {
     content = (
       <main className="app-shell rules-screen-shell multiplayer-shell">
         <section className="rules-screen-card multiplayer-panel">
@@ -893,6 +959,7 @@ function MultiplayerHostRoom({ code }: { code: RoomCode }) {
       <RulesScreen
         multiplayer
         gameMode={state.mode}
+        onBack={() => room.send({ type: "host_return_lobby" })}
         onComplete={() => room.send({ type: "host_start_game" })}
       />
     );
@@ -904,6 +971,7 @@ function MultiplayerHostRoom({ code }: { code: RoomCode }) {
   return (
     <>
       <RestoredToast visible={!!room.you?.reconnected} />
+      <RoomMenu state={state} role="host" send={room.send} />
       {content}
     </>
   );
@@ -985,6 +1053,8 @@ function PlayerWaiting({
 }) {
   const me = state.players.find((player) => player.id === playerId);
   const timer = useRoomTimer(state);
+  const visible = useSharedHintCount(state);
+  const listeningRound = state.round ?? roundById(state.currentRoundId);
   const { containerRef, innerRef } = useQuizContentFit(
     `${state.turnId}:${state.phase}:${own?.quizAnswer ? JSON.stringify(own.quizAnswer) : ""}:${own?.submission}:${own?.votedSubmissionId}`,
   );
@@ -1014,6 +1084,12 @@ function PlayerWaiting({
             <div ref={innerRef} className="quiz-content-fit-inner">
               <div className="multiplayer-waiting-content">
                 <h1 className="quiz-title">{title}</h1>
+                {(state.phase === "playing" || state.replay) && listeningRound ? (
+                  <LyricsPanel
+                    hintLines={pickLyricLines(listeningRound.lyrics, listeningRound.hintLineIds)}
+                    visibleCount={visible}
+                  />
+                ) : null}
                 {acceptedText ? (
                   <p className="lyric-line genius-bar genius-reveal-line multiplayer-answer-bar">
                     {acceptedText}
@@ -1032,7 +1108,9 @@ function PlayerWaiting({
         <div className="dock-host">
           <p className="dock-pause-hint">
             {state.pausedAt
-              ? "Игра продолжится после подключения общего экрана"
+              ? state.manualPaused
+                ? "Игра продолжится по команде ведущего"
+                : "Игра продолжится после подключения общего экрана"
               : "Следующий этап начнётся автоматически"}
           </p>
         </div>
@@ -1063,6 +1141,7 @@ function PlayerQuizController({
       ? selection
       : { turn: state.turnId, index: null, order: state.quiz?.orderLineIds ?? [] };
   const { seconds, total } = useRoomTimer(state);
+  const visibleHintLineCount = useSharedHintCount(state);
   const accepted = state.quiz?.answeredPlayerIds.includes(playerId) ?? false;
   const acceptedIndex = own?.quizAnswer?.variant === "mc4" ? own.quizAnswer.selectedIndex : current.index;
   const canSubmit = state.quiz?.variant === "order" || current.index !== null;
@@ -1095,7 +1174,7 @@ function PlayerQuizController({
         onSelectQuizOption={(index) => setSelection({ ...current, index })}
         hintLines={pickLyricLines(round.lyrics, round.hintLineIds)}
         revealLines={[]}
-        visibleHintLineCount={round.hintLineIds.length}
+        visibleHintLineCount={visibleHintLineCount}
         timerSeconds={seconds}
         totalSeconds={total}
         gamePaused={accepted || !!state.pausedAt}
@@ -1112,12 +1191,13 @@ function PlayerQuizController({
                   ? "Расставьте строки и подтвердите ответ"
                   : "Выберите вариант и подтвердите ответ"}
             </p>
+            <ReplayButton state={state} playerId={playerId} send={send} />
             <RoundProgress state={state} />
             <nav className="dock" aria-label="Ответ">
               <button
                 className="dock-btn dock-btn-primary"
                 type="button"
-                disabled={!canSubmit || accepted}
+                disabled={!canSubmit || accepted || !!state.pausedAt}
                 onClick={confirm}
                 aria-label="Подтвердить ответ"
               >
@@ -1167,6 +1247,7 @@ function PlayerFreestyleSubmit({
   const round = state.round ?? roundById(state.currentRoundId);
   const hintLines = round ? pickLyricLines(round.lyrics, round.hintLineIds) : [];
   const [text, setText] = useState("");
+  const visible = useSharedHintCount(state);
   if (state.freestyle?.submittedPlayerIds.includes(playerId))
     return (
       <PlayerWaiting
@@ -1178,22 +1259,16 @@ function PlayerFreestyleSubmit({
     );
   return (
     <MultiplayerScene state={state}>
+      <ReplayButton state={state} playerId={playerId} send={send} />
       <div className="quiz-screen">
         <PlayerStageHeader state={state} playerId={playerId} />
         <section className="quiz-content multiplayer-controller-content">
           <h1 className="quiz-title">Продолжи текст</h1>
           <RoundProgress state={state} />
-          {hintLines.length > 0 ? (
-            <div className="multiplayer-hint-bars">
-              {hintLines.map((line) => (
-                <p key={line.id} className="lyric-line genius-bar">
-                  {line.text}
-                </p>
-              ))}
-            </div>
-          ) : null}
+          <LyricsPanel hintLines={hintLines} visibleCount={visible} />
           <textarea
             className="multiplayer-textarea"
+            disabled={!!state.pausedAt}
             value={text}
             onChange={(event) => setText(event.target.value)}
             autoFocus
@@ -1201,7 +1276,7 @@ function PlayerFreestyleSubmit({
           <button
             type="button"
             className="btn btn-primary btn-hero"
-            disabled={!text.trim()}
+            disabled={!text.trim() || !!state.pausedAt}
             onClick={() => {
               const clean = text.trim();
               if (!clean) return;
@@ -1244,6 +1319,7 @@ function PlayerVote({
               <button
                 key={option.submissionId}
                 type="button"
+                disabled={!!state.pausedAt}
                 className="lyric-line genius-bar quiz-option"
                 onClick={() =>
                   send({ type: "player_vote", turnId: state.turnId, submissionId: option.submissionId })
@@ -1268,14 +1344,25 @@ function MultiplayerPlayerRoom({ code }: { code: RoomCode }) {
   const [name, setName] = useState(getSavedPlayerName);
   const room = usePartyRoom({ code, role: "player", playerName: name, enabled: !!name });
   useEffect(() => {
-    if (room.left) window.location.href = "/";
+    if (room.left) {
+      forgetRoom();
+      window.location.href = "/#menu";
+    }
   }, [room.left]);
-  if (!name) return <PlayerJoin code={code} onJoin={setName} />;
+  if (!name)
+    return (
+      <>
+        <RoomMenu state={null} role="player" send={room.send} />
+        <PlayerJoin code={code} onJoin={setName} />
+      </>
+    );
   const state = room.state;
   const playerId = room.you?.playerId;
   const own = room.you?.own;
   let content: ReactNode;
-  if (state?.phase === "expired") {
+  if (!room.admission.ticket) {
+    content = <AdmissionPanel admission={room.admission} />;
+  } else if (state?.phase === "expired") {
     content = <RoomExpired />;
   } else if (!state || !playerId) {
     content = (
@@ -1286,9 +1373,17 @@ function MultiplayerPlayerRoom({ code }: { code: RoomCode }) {
         </section>
       </main>
     );
-  } else if (state.pausedAt) {
+  } else if (
+    state.pausedAt &&
+    !["quiz_answering", "freestyle_submitting", "freestyle_voting"].includes(state.phase)
+  ) {
     content = (
-      <PlayerWaiting state={state} playerId={playerId} title="Пауза — ждём главный экран" own={own} />
+      <PlayerWaiting
+        state={state}
+        playerId={playerId}
+        title={state.manualPaused ? "Ведущий поставил игру на паузу" : "Пауза — ждём главный экран"}
+        own={own}
+      />
     );
   } else if (state.phase === "mode_select") {
     content = <InitialModeVote state={state} playerId={playerId} send={room.send} />;
@@ -1329,6 +1424,7 @@ function MultiplayerPlayerRoom({ code }: { code: RoomCode }) {
   return (
     <>
       <RestoredToast visible={!!room.you?.reconnected} />
+      <RoomMenu state={state} role="player" send={room.send} />
       {content}
     </>
   );

@@ -802,6 +802,11 @@ export function useQuizGame(options: { initialRoundState?: RoundState } = {}) {
   );
 
   return {
+    restartQuiz: () => {
+      exitToStartScreen();
+      selectGameMode("quiz");
+    },
+    backToGameRules: () => setRoundState("game_rules"),
     roundState,
     roundIndex,
     timerSeconds,

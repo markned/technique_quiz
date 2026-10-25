@@ -1,17 +1,17 @@
 import { useCoarsePointer } from "../hooks/useCoarsePointer";
-import { useFitTextToHeight } from "../hooks/useFitTextToHeight";
 import { useGesturePauseLayout } from "../hooks/useGesturePauseLayout";
 import { getControlsHintLines } from "../helpers/controlsCopy";
 import type { GameMode } from "../types";
 
 type RulesScreenProps = {
   onComplete: () => void;
+  onBack?: () => void;
   gameMode: GameMode;
   multiplayer?: boolean;
 };
 
 /** Только управление — после выбора режима, перед первым раундом */
-export function RulesScreen({ onComplete, gameMode, multiplayer = false }: RulesScreenProps) {
+export function RulesScreen({ onComplete, onBack, gameMode, multiplayer = false }: RulesScreenProps) {
   const coarse = useCoarsePointer();
   const gesturePause = useGesturePauseLayout();
   const lines = multiplayer
@@ -26,7 +26,7 @@ export function RulesScreen({ onComplete, gameMode, multiplayer = false }: Rules
           anim: "pulse",
           text:
             gameMode === "quiz"
-              ? "Выбирайте ответ или расставляйте строки на своих устройствах. На общем экране ответы не нажимаются."
+              ? "Выбирайте один из четырёх вариантов ответа на своих устройствах. На общем экране ответы не нажимаются."
               : "Напишите продолжение на своём устройстве, затем проголосуйте за чужой ответ.",
         },
         {
@@ -41,16 +41,16 @@ export function RulesScreen({ onComplete, gameMode, multiplayer = false }: Rules
         },
       ]
     : getControlsHintLines(gameMode, { gesturePause, coarse });
-  const { containerRef, textRef } = useFitTextToHeight({ maxPx: 44, floorMinPx: 8 });
 
   return (
     <main className="app-shell rules-screen-shell">
       <div className="rules-screen-card controls-screen-card">
+        <p className="rules-step">{multiplayer ? "Игра вместе" : "Перед началом"} · Управление</p>
         <h2 id="rules-title" className="rules-screen-title">
           {multiplayer ? "Как играть вместе" : "Управление"}
         </h2>
-        <div ref={containerRef} className="rules-screen-body controls-screen-body">
-          <div ref={textRef} className="rules-screen-text rules-screen-text--controls">
+        <div className="rules-screen-body controls-screen-body">
+          <div className="rules-screen-text rules-screen-text--controls">
             <ul className="controls-hint-list controls-hint-list--in-rules">
               {lines.map((line, i) => (
                 <li key={i} className={`controls-hint-item controls-hint-item--${line.anim}`}>
@@ -64,13 +64,18 @@ export function RulesScreen({ onComplete, gameMode, multiplayer = false }: Rules
           </div>
         </div>
         <div className="rules-screen-start-wrap">
+          {onBack ? (
+            <button className="btn rules-back" onClick={onBack}>
+              ← Назад
+            </button>
+          ) : null}
           <button
             type="button"
             className="rules-screen-start-btn"
             onClick={onComplete}
             aria-label="Начать игру"
           >
-            →
+            Начать игру →
           </button>
         </div>
       </div>

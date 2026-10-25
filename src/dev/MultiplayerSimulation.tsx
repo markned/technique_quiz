@@ -67,7 +67,25 @@ export function MultiplayerSimulation() {
   const createCode = () => (fast ? `E2EF${generateRoomCode().slice(0, 2)}` : generateRoomCode());
   const [code, setCode] = useState(createCode);
   const [playerCount, setPlayerCount] = useState(3);
-  const server = fast ? "&simServer=" + encodeURIComponent("http://localhost:2001") : "";
+  const [readyCode, setReadyCode] = useState("");
+  useEffect(() => {
+    const ready = (event: MessageEvent) => {
+      const host = document.querySelector<HTMLIFrameElement>(
+        'iframe[title="Основной сеанс · звук и ход игры"]',
+      );
+      if (
+        event.origin === window.location.origin &&
+        event.source === host?.contentWindow &&
+        event.data?.type === "simulation-host-ready" &&
+        event.data.code === code
+      )
+        setReadyCode(code);
+    };
+    window.addEventListener("message", ready);
+    return () => window.removeEventListener("message", ready);
+  }, [code]);
+  const server =
+    fast && import.meta.env.DEV ? "&simServer=" + encodeURIComponent("http://localhost:2001") : "";
   const [automatic, setAutomatic] = useState(false);
   const [layout, setLayout] = useState("grid");
   return (
@@ -111,11 +129,11 @@ export function MultiplayerSimulation() {
         <SessionWindow
           primary
           title="Основной сеанс · звук и ход игры"
-          src={`/room/${code}/host?simClient=${code}-host${server}`}
+          src={`/room/${code}/host?simClient=${code}-host&simPlayers=${playerCount}${server}`}
           automatic={automatic}
         />
         <div className="sim-clients">
-          {["Аня", "Борис", "Вика"].slice(0, playerCount).map((name, index) => (
+          {(readyCode === code ? ["Аня", "Борис", "Вика"].slice(0, playerCount) : []).map((name, index) => (
             <SessionWindow
               key={name}
               title={`Игрок ${index + 1} · ${name}`}

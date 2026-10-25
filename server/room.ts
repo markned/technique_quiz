@@ -139,6 +139,8 @@ function createInitialState(code: string): StoredRoomState {
     roundSnapshots: [],
     quizPayloads: {},
     pausedAt: null,
+    manualPaused: false,
+    replay: null,
     expiresAt: ts + 30 * 60_000,
     discord: false,
     turnId: "",
@@ -180,6 +182,8 @@ export class QuizRoom {
   async onStart() {
     const stored = await this.room.load();
     if (stored) this.state = stored;
+    this.state.manualPaused ??= false;
+    this.state.replay ??= null;
     this.state.minPlayers = MIN_PLAYERS;
     this.state.finalVote ??= this.state.phase === "finished" ? { votes: {}, decision: null } : null;
     this.state.backgroundStartedAt ??= this.state.playingStartedAt;
@@ -262,6 +266,47 @@ export class QuizRoom {
       return;
     }
 
+    if (
+      message.type === "host_pause" &&
+      meta.role === "host" &&
+      connection.id === this.state.activeHostConnectionId
+    ) {
+      if (!this.isActive()) return;
+      if (message.paused) {
+        this.state.manualPaused = true;
+        this.state.pausedAt ??= nowMs();
+      } else {
+        this.state.manualPaused = false;
+        this.resumeClock();
+        if (
+          this.state.phase === "quiz_answering" &&
+          this.state.quiz &&
+          this.allConnectedPlayersDone(this.state.quiz.answeredPlayerIds)
+        ) {
+          await this.finalizeQuizRound();
+          return;
+        }
+        if (
+          this.state.phase === "freestyle_submitting" &&
+          this.state.freestyle &&
+          this.allConnectedPlayersDone(this.state.freestyle.submittedPlayerIds)
+        ) {
+          await this.enterFreestyleVoting();
+          return;
+        }
+        if (this.state.phase === "freestyle_voting" && this.allEligibleVotersDone()) {
+          await this.finalizeFreestyleRound();
+          return;
+        }
+      }
+      this.touch(false);
+      await this.persistAndBroadcast();
+      return;
+    }
+    if (message.type === "player_leave" && meta.role === "player") {
+      await this.handlePlayerAction(message, meta.playerId, connection);
+      return;
+    }
     if (message.type === "ping") {
       if (meta.role === "host" && connection.id === this.state.activeHostConnectionId) {
         if (!this.state.hostConnected) {
@@ -279,10 +324,14 @@ export class QuizRoom {
       message.type === "host_retry_media" &&
       meta.role === "host" &&
       connection.id === this.state.activeHostConnectionId &&
-      this.state.phase === "playing"
+      (this.state.phase === "playing" || !!this.state.replay)
     ) {
-      this.state.pausedAt = null;
-      this.state.playingStartedAt = null;
+      if (this.state.manualPaused) return;
+      this.resumeClock();
+      if (this.state.replay) {
+        this.state.replay.startedAt = null;
+        this.state.replay.endsAt = null;
+      } else this.state.playingStartedAt = null;
       this.state.nextAdvanceAt = nowMs() + 30_000;
       this.touch();
       await this.persistAndBroadcast();
@@ -312,6 +361,26 @@ export class QuizRoom {
     await this.handlePlayerAction(message, meta.playerId, connection);
   }
 
+  private resumeClock() {
+    if (this.state.pausedAt === null) return;
+    const elapsed = Math.max(0, nowMs() - this.state.pausedAt);
+    for (const key of [
+      "deadlineAt",
+      "transitionUntil",
+      "nextAdvanceAt",
+      "playingStartedAt",
+      "backgroundStartedAt",
+    ] as const) {
+      const value = this.state[key];
+      if (value !== null) this.state[key] = value + elapsed;
+    }
+    if (this.state.replay) {
+      if (this.state.replay.startedAt !== null) this.state.replay.startedAt += elapsed;
+      if (this.state.replay.endsAt !== null) this.state.replay.endsAt += elapsed;
+    }
+    this.state.pausedAt = null;
+  }
+
   private async handleHostHello(clientId: string, hostToken: HostToken, connection: RoomConnection) {
     if (this.state.hostToken && this.state.hostToken !== hostToken) {
       this.sendError(connection, "host_conflict", "This room already has a different host session.");
@@ -325,25 +394,7 @@ export class QuizRoom {
         this.sendError(other, "session_replaced", "Главный экран открыт на другом устройстве.");
       }
     }
-    if (this.state.pausedAt) {
-      const elapsed = nowMs() - this.state.pausedAt;
-      for (const key of [
-        "deadlineAt",
-        "transitionUntil",
-        "nextAdvanceAt",
-        "playingStartedAt",
-        "backgroundStartedAt",
-      ] as const) {
-        const value = this.state[key];
-        if (value !== null) this.state[key] = value + elapsed;
-      }
-      this.state.pausedAt = null;
-      // Reload/replacement replays the listening fragment, never jumps past unheard music.
-      if (this.state.phase === "playing") {
-        this.state.playingStartedAt = null;
-        this.state.nextAdvanceAt = nowMs() + 30_000;
-      }
-    }
+    if (!this.state.manualPaused) this.resumeClock();
     this.state.hostLastSeenAt = nowMs();
     this.state.activeHostConnectionId = connection.id;
     this.state.hostToken = hostToken;
@@ -404,7 +455,7 @@ export class QuizRoom {
 
   private async handleHostAction(message: ClientMessage, connection: RoomConnection) {
     if (message.type === "host_media_failed") {
-      if (this.state.phase !== "playing") return;
+      if (this.state.phase !== "playing" && !this.state.replay) return;
       this.state.pausedAt = nowMs();
       this.state.expiresAt = nowMs() + 30 * 60_000;
       this.touch(false);
@@ -418,7 +469,32 @@ export class QuizRoom {
       await this.persistAndBroadcast();
       return;
     }
+    if (message.type === "host_return_lobby") {
+      if (!["rules", "mode_select"].includes(this.state.phase)) return;
+      this.state.phase = "lobby";
+      this.state.mode = null;
+      this.state.initialVote = null;
+      this.state.rosterLocked = false;
+      this.state.nextAdvanceAt = null;
+      this.touch();
+      await this.persistAndBroadcast();
+      return;
+    }
     if (message.type === "host_media_ready") {
+      if (this.state.replay) {
+        const replay = this.state.replay;
+        if (message.replayId !== replay.id || replay.startedAt !== null) return;
+        const round = currentRound(this.state);
+        if (!round) return;
+        replay.startedAt = nowMs();
+        replay.endsAt =
+          nowMs() + (this.isTest() ? 2_000 : Math.max(0.1, round.end - round.start - 0.12) * 1000);
+        this.state.nextAdvanceAt = replay.endsAt;
+        this.touch();
+        await this.persistAndBroadcast();
+        return;
+      }
+      if (message.replayId) return;
       if (this.state.phase !== "playing" || this.state.playingStartedAt !== null) return;
       const round = currentRound(this.state);
       if (!round) return;
@@ -507,21 +583,89 @@ export class QuizRoom {
       return;
     }
     if (message.type === "player_leave") {
-      if (this.state.phase !== "finished") {
-        this.sendError(connection, "bad_phase", "Выйти из состава можно после игры.");
-        return;
-      }
       delete this.state.playersById[playerId];
       delete this.state.playerTokens[playerId];
+      if (this.state.quiz) {
+        delete this.state.quiz.answers[playerId];
+        this.state.quiz.answeredPlayerIds = Object.keys(this.state.quiz.answers);
+      }
+      if (this.state.freestyle) {
+        delete this.state.freestyle.submissions[playerId];
+        delete this.state.freestyle.votes[playerId];
+        for (const [voter, target] of Object.entries(this.state.freestyle.votes))
+          if (target === playerId) delete this.state.freestyle.votes[voter];
+        this.syncFreestylePublicState();
+      }
       for (const [client, id] of Object.entries(this.state.playerIdByClientId))
         if (id === playerId) delete this.state.playerIdByClientId[client];
       if (this.state.finalVote) delete this.state.finalVote.votes[playerId];
+      if (this.state.initialVote) delete this.state.initialVote.votes[playerId];
       for (const socket of this.room.connections())
         if (socket.state?.role === "player" && socket.state.playerId === playerId) {
           socket.setState({ role: "spectator", clientId: socket.state.clientId });
           socket.send(JSON.stringify({ type: "player_left" } satisfies ServerMessage));
         }
+      if (this.isActive() && activePlayers(this.state).length < minimumPlayersForMode(this.state.mode)) {
+        await this.finishGame();
+        return;
+      }
+      if (
+        this.state.phase === "rules" &&
+        activePlayers(this.state).length < minimumPlayersForMode(this.state.mode)
+      ) {
+        this.state.phase = "lobby";
+        this.state.mode = null;
+        this.state.initialVote = null;
+        this.state.rosterLocked = false;
+        this.state.nextAdvanceAt = null;
+      }
+      if (!this.state.pausedAt) {
+        if (
+          this.state.phase === "quiz_answering" &&
+          this.state.quiz &&
+          this.allConnectedPlayersDone(this.state.quiz.answeredPlayerIds)
+        ) {
+          await this.finalizeQuizRound();
+          return;
+        }
+        if (
+          this.state.phase === "freestyle_submitting" &&
+          this.state.freestyle &&
+          this.allConnectedPlayersDone(this.state.freestyle.submittedPlayerIds)
+        ) {
+          await this.enterFreestyleVoting();
+          return;
+        }
+        if (this.state.phase === "freestyle_voting" && this.allEligibleVotersDone()) {
+          await this.finalizeFreestyleRound();
+          return;
+        }
+      }
       this.resolveFinalVotes();
+      this.touch();
+      await this.persistAndBroadcast();
+      return;
+    }
+    if (message.type === "player_replay") {
+      const eligible =
+        this.state.phase === "quiz_answering"
+          ? !this.state.quiz?.answers[playerId]
+          : this.state.phase === "freestyle_submitting"
+            ? !this.state.freestyle?.submissions[playerId]
+            : false;
+      if (!eligible || this.state.replay || !this.state.hostConnected || this.state.deadlineAt === null) {
+        this.sendError(connection, "bad_phase", "Повтор сейчас недоступен.");
+        return;
+      }
+      this.state.replay = {
+        id: id("replay"),
+        requestedBy: playerId,
+        startedAt: null,
+        endsAt: null,
+        remainingMs: Math.max(0, this.state.deadlineAt - nowMs()),
+      };
+      this.state.deadlineAt = null;
+      this.state.nextAdvanceAt = nowMs() + 30_000;
       this.touch();
       await this.persistAndBroadcast();
       return;
@@ -657,6 +801,7 @@ export class QuizRoom {
   }
 
   private async enterTransition() {
+    this.state.replay = null;
     const roundId = this.state.roundOrderIds[this.state.currentRoundIndex] ?? null;
     const round = this.state.roundSnapshots.find((item) => item.id === roundId) ?? roundById(roundId);
     if (!round) {
@@ -744,6 +889,7 @@ export class QuizRoom {
   }
 
   private async enterFreestyleVoting() {
+    this.state.replay = null;
     if (!this.state.freestyle) return;
     this.state.phase = "freestyle_voting";
     this.state.deadlineAt =
@@ -759,6 +905,7 @@ export class QuizRoom {
   }
 
   private async finalizeQuizRound() {
+    this.state.replay = null;
     const quiz = this.state.quiz;
     const round = currentRound(this.state);
     if (!quiz || !round) return;
@@ -794,6 +941,7 @@ export class QuizRoom {
   }
 
   private async finalizeFreestyleRound() {
+    this.state.replay = null;
     const freestyle = this.state.freestyle;
     const round = currentRound(this.state);
     if (!freestyle || !round) return;
@@ -855,6 +1003,9 @@ export class QuizRoom {
   }
 
   private async finishGame() {
+    this.state.replay = null;
+    this.state.manualPaused = false;
+    this.state.pausedAt = null;
     this.state.phase = "finished";
     this.state.finalVote = { votes: {}, decision: null };
     this.state.rosterLocked = false;
@@ -935,7 +1086,7 @@ export class QuizRoom {
       this.state.pausedAt || !this.isActive()
         ? this.state.expiresAt
         : (this.state.transitionUntil ??
-          this.state.deadlineAt ??
+          (this.state.replay ? this.state.nextAdvanceAt : this.state.deadlineAt) ??
           this.state.nextAdvanceAt ??
           this.state.expiresAt);
     const next =
@@ -1006,6 +1157,19 @@ export class QuizRoom {
         this.touch();
         await this.persistAndBroadcast();
       } else await this.startGame(true);
+      return;
+    }
+    if (this.state.replay && this.state.nextAdvanceAt !== null && this.state.nextAdvanceAt <= nowMs()) {
+      if (this.state.replay.startedAt === null) {
+        this.state.pausedAt = nowMs();
+        this.touch(false);
+      } else {
+        this.state.deadlineAt = nowMs() + this.state.replay.remainingMs;
+        this.state.replay = null;
+        this.state.nextAdvanceAt = null;
+        this.touch();
+      }
+      await this.persistAndBroadcast();
       return;
     }
     const due = this.state.transitionUntil ?? this.state.deadlineAt ?? this.state.nextAdvanceAt;
@@ -1109,6 +1273,8 @@ export class QuizRoom {
         lastSeenAt,
       })),
       pausedAt: this.state.pausedAt,
+      manualPaused: this.state.manualPaused,
+      replay: this.state.replay,
       expiresAt: this.state.expiresAt,
       discord: this.state.discord,
       turnId: this.state.turnId,

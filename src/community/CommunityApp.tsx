@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { apiUrl } from "./api";
 import { CommunityRoundSchema, type Author, type CommunityRoundInput, type RoundDraft } from "./schema";
 import { AudioWaveformTrim } from "../editor/AudioWaveformTrim";
@@ -63,6 +63,21 @@ export function CommunityApp() {
   const editable = isAuthor && draft?.status !== "submitted";
   const stale = !!draft && revision !== null && revision !== draft.revision;
   const dirty = isAuthor && (!draft || JSON.stringify(content) !== JSON.stringify(draft.content));
+  const hasChanges =
+    dirty && !!(content.title || content.audioFile || content.lyrics.some((line) => line.text));
+  const leaving = useRef(false);
+  const [leaveAction, setLeaveAction] = useState<(() => void) | null>(null);
+  const requestLeave = (action: () => void) => {
+    if (hasChanges) setLeaveAction(() => action);
+    else action();
+  };
+  useEffect(() => {
+    const before = (e: BeforeUnloadEvent) => {
+      if (hasChanges && !leaving.current) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", before);
+    return () => window.removeEventListener("beforeunload", before);
+  }, [hasChanges]);
 
   const request = useCallback(
     async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
@@ -218,34 +233,104 @@ export function CommunityApp() {
             }
           />
           {error ? <p role="alert">{error}</p> : null}
-          <a href="/">В игру</a>
+          <a
+            href="/#menu"
+            onClick={(e) => {
+              e.preventDefault();
+              requestLeave(() => {
+                leaving.current = true;
+                window.location.href = "/#menu";
+              });
+            }}
+          >
+            В игру
+          </a>
         </section>
       </main>
     );
 
   return (
     <main className="editor-app">
+      {leaveAction ? (
+        <div
+          className="confirm-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Несохранённые изменения"
+        >
+          <section className="confirm-dialog">
+            <h2>Сохранить изменения?</h2>
+            <p>В черновике есть несохранённые изменения.</p>
+            <div className="confirm-actions">
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await save();
+                    leaving.current = true;
+                    const action = leaveAction;
+                    setLeaveAction(null);
+                    action();
+                  })
+                }
+              >
+                Сохранить и выйти
+              </button>
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => {
+                  leaving.current = true;
+                  const action = leaveAction;
+                  setLeaveAction(null);
+                  action();
+                }}
+              >
+                Выйти без сохранения
+              </button>
+              <button className="btn" onClick={() => setLeaveAction(null)}>
+                Остаться
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       <header className="editor-header">
         <h1>Редактор сообщества</h1>
         <span>
           {user.username} · {user.role === "moderator" ? "Модератор" : "Автор"}
         </span>
-        <a href="/">В игру</a>
+        <a
+          href="/#menu"
+          onClick={(e) => {
+            e.preventDefault();
+            requestLeave(() => {
+              leaving.current = true;
+              window.location.href = "/#menu";
+            });
+          }}
+        >
+          В игру
+        </a>
         <button
           type="button"
           disabled={busy}
           onClick={() =>
-            void run(async () => {
-              await request("/api/logout", { method: "POST" });
-              sessionStorage.removeItem(SESSION_KEY);
-              sessionStorage.removeItem(EDITING_KEY);
-              setToken("");
-              setUser(null);
-              setRounds([]);
-              setSelected(null);
-              setRevision(null);
-              setContent(blank());
-            })
+            requestLeave(
+              () =>
+                void run(async () => {
+                  await request("/api/logout", { method: "POST" });
+                  sessionStorage.removeItem(SESSION_KEY);
+                  sessionStorage.removeItem(EDITING_KEY);
+                  setToken("");
+                  setUser(null);
+                  setRounds([]);
+                  setSelected(null);
+                  setRevision(null);
+                  setContent(blank());
+                }),
+            )
           }
         >
           Выйти

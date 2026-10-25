@@ -130,6 +130,14 @@ export type PublicRoomState = {
   maxPlayers: number;
   hostConnected: boolean;
   pausedAt: number | null;
+  manualPaused: boolean;
+  replay: {
+    id: string;
+    requestedBy: PlayerId;
+    startedAt: number | null;
+    endsAt: number | null;
+    remainingMs: number;
+  } | null;
   expiresAt: number;
   discord: boolean;
   turnId: string;

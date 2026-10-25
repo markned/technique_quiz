@@ -26,3 +26,6 @@ public/content/video/ui/1080P.mov
 
 .wrangler/
 .dev.vars*
+
+dist-test/
+.codex-private/

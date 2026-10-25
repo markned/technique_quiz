@@ -4,6 +4,9 @@
   "main": "party/server.ts",
   "compatibility_date": "2026-10-25",
   "compatibility_flags": ["nodejs_compat"],
+  "ratelimits": [
+    { "name": "RequestLimit", "namespace_id": "1876801", "simple": { "limit": 120, "period": 60 } },
+  ],
   "durable_objects": {
     "bindings": [
       {
@@ -28,11 +31,36 @@
   ],
   "vars": {
     "TEST_MODE": "false",
+    "ADMISSION_ENFORCED": "true",
     "APP_ORIGIN": "https://technique.ink",
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFldif-mJLh3migK",
   },
   "env": {
+    "private": {
+      "name": "technique-quiz-test",
+      "assets": {
+        "directory": "./dist-test",
+        "binding": "Assets",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": true,
+      },
+      "vars": { "TEST_MODE": "true", "APP_ORIGIN": "https://technique-quiz-test.markned.workers.dev" },
+      "ratelimits": [
+        { "name": "RequestLimit", "namespace_id": "1876803", "simple": { "limit": 120, "period": 60 } },
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "Main", "class_name": "TechniqueQuizRoom" },
+          { "name": "Community", "class_name": "CommunityStore" },
+        ],
+      },
+      "r2_buckets": [{ "binding": "Media", "bucket_name": "technique-quiz-media-test" }],
+    },
     "test": {
       "name": "technique-quiz-test",
+      "ratelimits": [
+        { "name": "RequestLimit", "namespace_id": "1876802", "simple": { "limit": 120, "period": 60 } },
+      ],
       "vars": {
         "TEST_MODE": "true",
         "APP_ORIGIN": "http://localhost:18768",

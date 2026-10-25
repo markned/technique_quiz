@@ -21,10 +21,11 @@
     "deploy": "npm run build && npx gh-pages -d dist",
     "transcode:media": "node scripts/transcode-media.mjs",
     "normalize:video-loudness": "node scripts/normalize-quiz-ui-video-loudness.mjs",
-    "party:test": "wrangler dev --env test --port 1999 --var ADMIN_SETUP_SECRET:local-test-setup-only",
+    "party:test": "wrangler dev --env test --port 1999 --var ADMIN_SETUP_SECRET:local-test-setup-only --var APP_ORIGIN:http://localhost:18768",
     "server:check": "wrangler deploy --env= --dry-run",
     "test:load": "node scripts/load-multiplayer.mjs",
-    "community:setup": "node scripts/setup-moderator.mjs"
+    "community:setup": "node scripts/setup-moderator.mjs",
+    "build:test": "VITE_PRIVATE_TESTING=1 VITE_MULTIPLAYER_SERVER_URL=https://technique-quiz-test.markned.workers.dev vite build --outDir dist-test && node scripts/prepare-private-assets.mjs"
   },
   "dependencies": {
     "framer-motion": "^11.18.2",

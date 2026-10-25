@@ -12,14 +12,14 @@ export function RestartConfirmDialog({ open, onCancel, onConfirm }: RestartConfi
   return (
     <div className="confirm-backdrop" role="dialog" aria-modal="true">
       <div className="confirm-dialog">
-        <h4>Вернуться к выбору режима?</h4>
+        <h4>Начать заново?</h4>
         <p>Текущий прогресс по раундам будет сброшен.</p>
         <div className="confirm-actions">
           <button type="button" className="btn" onClick={onCancel}>
             Отмена
           </button>
           <button type="button" className="btn btn-danger" onClick={onConfirm}>
-            К режимам
+            Начать заново
           </button>
         </div>
       </div>

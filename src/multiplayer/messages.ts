@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-const clientId = z.string().min(8).max(128);
+const clientId = z
+  .string()
+  .min(8)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/)
+  .refine((v) => !["__proto__", "prototype", "constructor"].includes(v));
 const hostToken = z.string().min(12).max(160);
 const playerId = z.string().min(4).max(80);
 const name = z.string().trim().min(1).max(24);
@@ -23,9 +28,16 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   HostHelloMessageSchema,
   z.object({ type: z.literal("host_media_failed"), turnId: z.string().min(1) }),
   z.object({ type: z.literal("host_retry_media") }),
+  z.object({ type: z.literal("host_pause"), paused: z.boolean() }),
+  z.object({ type: z.literal("host_return_lobby") }),
+  z.object({ type: z.literal("player_replay"), turnId: z.string().min(1) }),
   z.object({ type: z.literal("ping") }),
   z.object({ type: z.literal("host_set_discord"), enabled: z.boolean() }),
-  z.object({ type: z.literal("host_media_ready"), turnId: z.string().min(1) }),
+  z.object({
+    type: z.literal("host_media_ready"),
+    turnId: z.string().min(1),
+    replayId: z.string().max(80).optional(),
+  }),
   PlayerJoinMessageSchema,
   z.object({ type: z.literal("player_leave") }),
   z.object({ type: z.literal("player_mode_vote"), mode: z.enum(["freestyle", "quiz"]) }),

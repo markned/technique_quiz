@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /// <reference types="vitest/config" />
 import { networkInterfaces } from "node:os";
 import react from "@vitejs/plugin-react";
@@ -35,14 +36,36 @@ export default defineConfig(({ command }) => ({
     host: "0.0.0.0",
     proxy: {
       "/parties": { target: "http://127.0.0.1:1999", ws: true },
-      "^/api/(catalog|setup|login|register|me|logout|invites|users|media|rounds)(/|$)": {
+      "^/api/(security|admission|catalog|setup|login|register|me|logout|invites|users|media|rounds)(/|$)": {
         target: "http://127.0.0.1:1999",
         headers: { Origin: "http://localhost:18768" },
       },
     },
     strictPort: true,
   },
-  plugins: [react(), photosManifestPlugin(), geniusDevPlugin(), editorDevPlugin()],
+  plugins: [
+    {
+      name: "production-security-policy",
+      apply: "build",
+      transformIndexHtml: {
+        order: "post",
+        handler(html) {
+          const hashes = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(
+            (m) => `'sha256-${createHash("sha256").update(m[1]!).digest("base64")}'`,
+          );
+          const policy = `default-src 'self'; script-src 'self' ${hashes.join(" ")} https://challenges.cloudflare.com https://mc.yandex.ru https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https://*.workers.dev https://technique.ink; connect-src 'self' https://*.workers.dev wss://*.workers.dev https://mc.yandex.ru https://mc.yandex.com https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com; frame-src 'self' https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com; object-src 'none'; base-uri 'self'; form-action 'self'`;
+          return html.replace(
+            "<head>",
+            `<head><meta http-equiv="Content-Security-Policy" content="${policy}"><meta name="referrer" content="strict-origin-when-cross-origin">`,
+          );
+        },
+      },
+    },
+    react(),
+    photosManifestPlugin(),
+    geniusDevPlugin(),
+    editorDevPlugin(),
+  ],
   test: {
     environment: "node",
   },
