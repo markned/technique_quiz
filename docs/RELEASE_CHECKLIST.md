@@ -14,7 +14,9 @@ The pull request runs formatting, lint, unit tests, Worker dry-run, browser test
 6. Configure GitHub Pages to deploy through GitHub Actions. Merge the reviewed PR only after backend health is confirmed.
 7. If community authoring is enabled, temporarily set `ADMIN_SETUP_SECRET`, run the moderator setup described in README, then remove that secret. Invite authors through the moderator interface.
 
-Cloudflare authentication, real bucket creation and production health have not been performed by the local preparation task. No production backend address is invented or committed. The static frontend alone cannot host WebSocket rooms or the community API.
+Backend deployed on 2026-10-25: `https://technique-quiz.markned.workers.dev`. Workers Free was confirmed in the dashboard; the dedicated R2 Standard bucket was created empty with public access disabled. `/health` and `/api/catalog` passed, and GitHub variable `MULTIPLAYER_SERVER_URL` was configured. Pages already uses GitHub Actions and the `technique.ink` custom domain.
+
+See [free-tier protection](FREE_TIER.md) for persistent R2 caps and account-wide billing limitations. The static frontend alone cannot host WebSocket rooms or the community API.
 
 ## Reproduce the local acceptance tests
 
