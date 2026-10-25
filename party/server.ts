@@ -219,6 +219,10 @@ export default {
     const response = await app.fetch(request, env);
     if (response.status === 101) return response;
     const safe = new Response(response.body, response);
+    if (new URL(request.url).pathname.startsWith("/parties/") && response.status === 200) {
+      safe.headers.set("Access-Control-Allow-Origin", env.APP_ORIGIN ?? "");
+      safe.headers.set("Vary", "Origin");
+    }
     safe.headers.set("X-Content-Type-Options", "nosniff");
     safe.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
     safe.headers.set("X-Frame-Options", "SAMEORIGIN");

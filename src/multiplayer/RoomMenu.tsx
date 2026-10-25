@@ -14,6 +14,7 @@ export function RoomMenu({
   send: (message: ClientMessage) => boolean;
 }) {
   const leaving = useRef(false);
+  const dialog = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [rules, setRules] = useState(false);
   const active = !!state && !["lobby", "mode_select", "rules", "finished", "expired"].includes(state.phase);
@@ -39,6 +40,29 @@ export function RoomMenu({
       window.removeEventListener("beforeunload", before);
     };
   });
+  useEffect(() => {
+    if (!open || rules) return;
+    const previous = document.activeElement as HTMLElement;
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const buttons = dialog.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled), a[href]");
+      if (!buttons?.length) return;
+      const first = buttons[0]!,
+        last = buttons[buttons.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", trap);
+    return () => {
+      window.removeEventListener("keydown", trap);
+      previous?.focus();
+    };
+  }, [open, rules]);
   const exit = () => {
     if (
       state &&
@@ -72,7 +96,7 @@ export function RoomMenu({
         </button>
       ) : null}
       {open ? (
-        <div className="navigation-modal" role="dialog" aria-modal="true" aria-label="Меню игры">
+        <div ref={dialog} className="navigation-modal" role="dialog" aria-modal="true" aria-label="Меню игры">
           <section className="navigation-card">
             <p className="multiplayer-eyebrow">
               {role === "host" ? "Главный экран" : "Игрок"} {state ? `· ${state.code}` : ""}

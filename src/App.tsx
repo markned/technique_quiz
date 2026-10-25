@@ -1,4 +1,4 @@
-import { useMenuStage, recentRoom } from "./navigation";
+import { useMenuStage, useRecentRoom } from "./navigation";
 import { IntroScreen } from "./components/IntroScreen";
 import { GameRulesScreen } from "./components/GameRulesScreen";
 import { ModeSelectScreen } from "./components/ModeSelectScreen";
@@ -225,6 +225,7 @@ function LocalGameApp({
 
 function HomeApp() {
   const [stage, setStage] = useMenuStage();
+  const room = useRecentRoom();
   if (stage === "intro") {
     return (
       <>
@@ -243,12 +244,9 @@ function HomeApp() {
         <button className="menu-back" onClick={() => setStage("start")}>
           ← Назад
         </button>
-        {recentRoom() ? (
-          <a
-            className="recent-room"
-            href={`/room/${recentRoom()!.code}/${recentRoom()!.role === "host" ? "host" : "player"}`}
-          >
-            Вернуться в комнату {recentRoom()!.code} · {recentRoom()!.role === "host" ? "Ведущий" : "Игрок"}
+        {room ? (
+          <a className="recent-room" href={`/room/${room.code}/${room.role === "host" ? "host" : "player"}`}>
+            Вернуться в комнату {room.code} · {room.role === "host" ? "Ведущий" : "Игрок"}
           </a>
         ) : null}
         <MainModeChoiceScreen

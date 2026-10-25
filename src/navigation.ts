@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "./community/api";
 export function navigateMenu(stage = "menu") {
   window.location.href = `/#${stage}`;
 }
@@ -50,4 +51,36 @@ export function forgetRoom() {
   } catch {
     /* storage unavailable */
   }
+}
+
+export function useRecentRoom() {
+  const [room, setRoom] = useState(recentRoom);
+  useEffect(() => {
+    if (!room) return;
+    let disposed = false;
+    let ticket = "";
+    try {
+      ticket = localStorage.getItem(`technique_admission:${room.role}:${room.code}`) ?? "";
+    } catch {
+      /* unavailable */
+    }
+    void fetch(apiUrl(`/parties/main/${room.code}?ticket=${encodeURIComponent(ticket)}`), {
+      signal: AbortSignal.timeout(5000),
+    })
+      .then(async (response) => {
+        if (!response.ok) return; // Keep the recovery link during temporary connection or admission failure.
+        const status = (await response.json()) as { phase: string };
+        if (!disposed && status.phase === "expired") {
+          forgetRoom();
+          setRoom(null);
+        }
+      })
+      .catch(() => {
+        /* Offline users should still see their recovery link. */
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [room]);
+  return room;
 }
