@@ -334,3 +334,15 @@ test("menu back navigation and readable rules work on a narrow screen", async ({
   await expect(page.getByRole("heading", { name: "Об игре" })).toBeVisible();
   await expect(page.locator(".rules-screen-text")).toHaveCSS("font-size", /^(1[6-9]|[2-9][0-9])/);
 });
+
+test("cancelling browser back keeps the active singleplayer session", async ({ page }) => {
+  await openMainModeChoice(page);
+  await page.getByRole("button", { name: "Один игрок", exact: true }).click();
+  await page.getByRole("button", { name: "К управлению" }).click();
+  await page.getByRole("button", { name: "Начать игру", exact: true }).click();
+  await expect(page).toHaveURL(/#singleplayer\/play$/);
+  page.on("dialog", (dialog) => dialog.dismiss());
+  await page.goBack();
+  await expect(page).toHaveURL(/#singleplayer\/play$/);
+  await expect(page.getByRole("heading", { name: "Управление", exact: true })).toHaveCount(0);
+});
