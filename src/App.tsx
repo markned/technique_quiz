@@ -43,14 +43,14 @@ function LocalGameApp({
         !window.confirm("Выйти из игры? Текущий прогресс будет сброшен.")
       ) {
         e.stopImmediatePropagation();
-        history.forward();
+        history.pushState(null, "", "#singleplayer/play");
         return;
       }
       if (target === "singleplayer") game.backToGameRules();
       if (target === "singleplayer/controls") game.restartQuiz();
     };
-    window.addEventListener("popstate", pop);
-    return () => window.removeEventListener("popstate", pop);
+    window.addEventListener("popstate", pop, true);
+    return () => window.removeEventListener("popstate", pop, true);
   }, [quizOnly, game]);
   const selectQuiz = () => {
     history.pushState(null, "", "#singleplayer/controls");
@@ -95,7 +95,16 @@ function LocalGameApp({
     if (!game.gameMode) {
       content = null;
     } else {
-      content = <RulesScreen onBack={game.backToGameRules} onComplete={playQuiz} gameMode={game.gameMode} />;
+      content = (
+        <RulesScreen
+          onBack={() => {
+            if (quizOnly && !game.previewMode) history.back();
+            else game.backToGameRules();
+          }}
+          onComplete={playQuiz}
+          gameMode={game.gameMode}
+        />
+      );
     }
   } else if (game.roundState === "finished") {
     const subtitle = game.gameMode === "quiz" ? `Правильных ответов: ${game.quiz.score}` : undefined;
