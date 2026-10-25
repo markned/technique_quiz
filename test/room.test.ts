@@ -714,3 +714,19 @@ it("returns to lobby if a rules-stage departure removes the minimum roster", asy
   await f.send(f.players[0]!, { type: "player_leave" });
   expect(f.game.state).toMatchObject({ phase: "lobby", rosterLocked: false, mode: null });
 });
+
+it("keeps a completed roster frozen during pause and advances on explicit resume", async () => {
+  const f = await fixture();
+  await f.start();
+  for (const p of f.players.slice(0, 2))
+    await f.send(p, {
+      type: "player_quiz_answer",
+      turnId: f.game.state.turnId,
+      answer: { variant: "mc4", selectedIndex: 0 },
+    });
+  await f.send(f.host, { type: "host_pause", paused: true });
+  await f.send(f.players[2]!, { type: "player_leave" });
+  expect(f.game.state.phase).toBe("quiz_answering");
+  await f.send(f.host, { type: "host_pause", paused: false });
+  expect(f.game.state.phase).toBe("round_results");
+});

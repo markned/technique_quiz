@@ -278,6 +278,26 @@ export class QuizRoom {
       } else {
         this.state.manualPaused = false;
         this.resumeClock();
+        if (
+          this.state.phase === "quiz_answering" &&
+          this.state.quiz &&
+          this.allConnectedPlayersDone(this.state.quiz.answeredPlayerIds)
+        ) {
+          await this.finalizeQuizRound();
+          return;
+        }
+        if (
+          this.state.phase === "freestyle_submitting" &&
+          this.state.freestyle &&
+          this.allConnectedPlayersDone(this.state.freestyle.submittedPlayerIds)
+        ) {
+          await this.enterFreestyleVoting();
+          return;
+        }
+        if (this.state.phase === "freestyle_voting" && this.allEligibleVotersDone()) {
+          await this.finalizeFreestyleRound();
+          return;
+        }
       }
       this.touch(false);
       await this.persistAndBroadcast();

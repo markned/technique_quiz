@@ -28,12 +28,17 @@ export function useSimulation(
     window.parent.postMessage({ type: "simulation-ready" }, window.location.origin);
     return () => window.removeEventListener("message", receive);
   }, [active]);
+  useEffect(() => {
+    if (active && role === "host" && state)
+      window.parent.postMessage({ type: "simulation-host-ready", code: state.code }, window.location.origin);
+  }, [active, role, state?.code]);
   let action: ClientMessage | undefined;
   if (active && automatic && state && !state.pausedAt) {
     if (role === "host") {
       if (
         state.phase === "lobby" &&
-        state.players.filter((player) => player.connected).length >= state.minPlayers
+        state.players.filter((player) => player.connected).length >=
+          Number(params.get("simPlayers") ?? state.minPlayers)
       )
         action = { type: "host_start_mode_select" };
       if (state.phase === "rules") action = { type: "host_start_game" };
