@@ -801,6 +801,7 @@
   transform: translateX(-50%);
 }
 .multiplayer-replay {
+  pointer-events: auto;
   position: relative;
   z-index: 3;
   align-self: center;

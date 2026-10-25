@@ -202,7 +202,7 @@ test("a lost main screen pauses the game and a recovery link resumes it on anoth
   await host.getByRole("button", { name: "Начать игру" }).click();
   await expect(alice.getByRole("button", { name: "Подтвердить ответ" })).toBeVisible();
   await host.close();
-  await expect(alice.getByRole("heading", { name: "Пауза — ждём главный экран" })).toBeVisible();
+  await expect(alice.getByText("Пауза — ждём главный экран", { exact: true })).toBeVisible();
   const replacement = await browser.newPage();
   await replacement.goto(`/room/${code}/host#screen=${token}`);
   await expect(alice.getByRole("button", { name: "Подтвердить ответ" })).toBeVisible();
@@ -242,7 +242,7 @@ test("real music playback handles media errors and player refreshes", async ({ b
     await expect(
       host.getByText("Не удалось воспроизвести музыку. Проверь звук и нажми «Повторить»."),
     ).toBeVisible();
-    await expect(alice.getByRole("heading", { name: "Пауза — ждём главный экран" })).toBeVisible();
+    await expect(alice.getByText("Пауза — ждём главный экран", { exact: true })).toBeVisible();
     await expect(host.getByRole("button", { name: "Повторить", exact: true })).toBeVisible();
     return;
   }

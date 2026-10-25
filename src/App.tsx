@@ -14,7 +14,7 @@ import { RulesScreen } from "./components/RulesScreen";
 import { MainModeChoiceScreen } from "./components/MainModeChoiceScreen";
 import { StartScreen } from "./components/StartScreen";
 import { TransitionOverlay } from "./components/TransitionOverlay";
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { MasterVolumeControl } from "./components/MasterVolumeControl";
 import { getGuessSeconds } from "./helpers/quizConfig";
 import { useQuizGame } from "./hooks/useQuizGame";
@@ -32,11 +32,15 @@ function LocalGameApp({
   initialRoundState?: "intro" | "game_rules";
 }) {
   const game = useQuizGame({ initialRoundState });
+  const currentGame = useRef(game);
+  currentGame.current = game;
+  const navigationActive = useRef(false);
+  navigationActive.current = !["game_rules", "rules", "intro", "finished"].includes(game.roundState);
   useEffect(() => {
     if (!quizOnly || game.previewMode) return;
     const pop = (e: PopStateEvent) => {
       const target = window.location.hash.slice(1);
-      const active = !["game_rules", "rules", "intro", "finished"].includes(game.roundState);
+      const active = navigationActive.current;
       if (
         active &&
         target !== "singleplayer/play" &&
@@ -46,17 +50,18 @@ function LocalGameApp({
         history.pushState(null, "", "#singleplayer/play");
         return;
       }
-      if (target === "singleplayer") game.backToGameRules();
-      if (target === "singleplayer/controls") game.restartQuiz();
+      if (target === "singleplayer") currentGame.current.backToGameRules();
+      if (target === "singleplayer/controls") currentGame.current.restartQuiz();
     };
     window.addEventListener("popstate", pop, true);
     return () => window.removeEventListener("popstate", pop, true);
-  }, [quizOnly, game]);
+  }, [quizOnly, game.previewMode]);
   const selectQuiz = () => {
     history.pushState(null, "", "#singleplayer/controls");
     game.selectGameMode("quiz");
   };
   const playQuiz = () => {
+    navigationActive.current = true;
     if (quizOnly && !game.previewMode) history.pushState(null, "", "#singleplayer/play");
     game.skipRulesAndStart();
   };

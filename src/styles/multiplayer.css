@@ -175,7 +175,7 @@
 
 /* Game content shares LocalGameApp's background and max-width, without a menu card. */
 .multiplayer-player-scene .app-overlay {
-  padding-bottom: calc(100px + var(--safe-bottom));
+  padding-bottom: calc(155px + var(--safe-bottom));
 }
 .multiplayer-waiting-content {
   width: 100%;
@@ -338,7 +338,7 @@
     grid-template-columns: 1fr;
   }
   .multiplayer-player-scene .app-overlay {
-    padding-bottom: calc(118px + var(--safe-bottom));
+    padding-bottom: calc(155px + var(--safe-bottom));
   }
   .multiplayer-player-grid .lyric-line.genius-bar {
     font-size: 0.9rem;
