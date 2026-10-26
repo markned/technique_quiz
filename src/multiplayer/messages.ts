@@ -26,6 +26,10 @@ export const PlayerJoinMessageSchema = z.object({
 
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   HostHelloMessageSchema,
+  z.object({ type: z.literal("player_ready") }),
+  z.object({ type: z.literal("player_rematch") }),
+  z.object({ type: z.literal("player_media_ready"), turnId: z.string().min(1) }),
+  z.object({ type: z.literal("player_media_failed"), turnId: z.string().min(1) }),
   z.object({ type: z.literal("host_media_failed"), turnId: z.string().min(1) }),
   z.object({ type: z.literal("host_retry_media") }),
   z.object({ type: z.literal("host_pause"), paused: z.boolean() }),

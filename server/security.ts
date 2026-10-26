@@ -26,6 +26,7 @@ const schema = z.object({
   room: z.string().regex(/^[A-Z0-9]{6}$/),
   role: z.enum(["host", "player"]),
   token: z.string().min(1).max(2048),
+  scope: z.literal("queue").optional(),
 });
 export function localSecurityBypass(request: Request, env: SecurityEnv) {
   const host = new URL(request.url).hostname;
@@ -44,14 +45,19 @@ export async function mintTicket(
   secret: string,
   identity: { clientId: string; room: string; role: "host" | "player" },
   now = Date.now(),
+  purpose = "room-admission-v1",
 ) {
-  const payload = b64(
-    enc.encode(JSON.stringify({ ...identity, expiresAt: now + 24 * 3600_000, purpose: "room-admission-v1" })),
-  );
+  const payload = b64(enc.encode(JSON.stringify({ ...identity, expiresAt: now + 24 * 3600_000, purpose })));
   const signature = await crypto.subtle.sign("HMAC", await key(secret), enc.encode(payload));
   return `${payload}.${b64(new Uint8Array(signature))}`;
 }
-export async function verifyTicket(secret: string, ticket: string, room: string, now = Date.now()) {
+export async function verifyTicket(
+  secret: string,
+  ticket: string,
+  room: string,
+  now = Date.now(),
+  purpose = "room-admission-v1",
+) {
   try {
     if (ticket.length > 2048) return null;
     const [p, s, ...rest] = ticket.split(".");
@@ -59,7 +65,7 @@ export async function verifyTicket(secret: string, ticket: string, room: string,
     if (!(await crypto.subtle.verify("HMAC", await key(secret), unb64(s), enc.encode(p)))) return null;
     const data = JSON.parse(new TextDecoder().decode(unb64(p)));
     if (
-      data.purpose !== "room-admission-v1" ||
+      data.purpose !== purpose ||
       data.room !== room ||
       data.expiresAt <= now ||
       data.expiresAt > now + 25 * 3600_000
@@ -95,7 +101,9 @@ export async function admission(request: Request, env: SecurityEnv) {
   if (!data.success) return Response.json({ error: "Проверь данные подключения." }, { status: 400 });
   if (!env.TURNSTILE_SECRET || !env.ADMISSION_SECRET)
     return Response.json({ error: "Защита входа ещё не настроена." }, { status: 503 });
-  const { token, ...identity } = data.data;
+  const { token, scope, ...identity } = data.data;
+  if (scope === "queue" && (identity.role !== "player" || identity.room !== "ONLINE"))
+    return Response.json({ error: "Некорректный допуск в поиск." }, { status: 400 });
   const valid = await checkTurnstile(
     env.TURNSTILE_SECRET,
     token,
@@ -103,5 +111,12 @@ export async function admission(request: Request, env: SecurityEnv) {
     new URL(env.APP_ORIGIN!).hostname,
   );
   if (!valid) return Response.json({ error: "Проверка не пройдена. Повтори попытку." }, { status: 403 });
-  return Response.json({ ticket: await mintTicket(env.ADMISSION_SECRET, identity) });
+  return Response.json({
+    ticket: await mintTicket(
+      env.ADMISSION_SECRET,
+      identity,
+      Date.now(),
+      scope === "queue" ? "queue-admission-v1" : "room-admission-v1",
+    ),
+  });
 }

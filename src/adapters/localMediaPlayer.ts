@@ -47,6 +47,13 @@ export class LocalMediaPlayer implements PlayerAdapter {
     });
   }
 
+  /** Prime this same media element during the online lobby's explicit Ready gesture. */
+  async unlockFromGesture(): Promise<void> {
+    this.media.src = "/content/audio/unlock.wav";
+    await this.media.play();
+    this.media.pause();
+  }
+
   play(): void {
     void this.media.play();
   }

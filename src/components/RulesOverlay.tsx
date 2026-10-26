@@ -6,12 +6,19 @@ import type { GameMode } from "../types";
 type RulesOverlayProps = {
   open: boolean;
   multiplayer?: boolean;
+  online?: boolean;
   onClose: () => void;
   gameMode: GameMode | null;
 };
 
 /** Общие правила поверх квиза (пауза) */
-export function RulesOverlay({ open, onClose, gameMode, multiplayer = false }: RulesOverlayProps) {
+export function RulesOverlay({
+  open,
+  onClose,
+  gameMode,
+  multiplayer = false,
+  online = false,
+}: RulesOverlayProps) {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -64,17 +71,26 @@ export function RulesOverlay({ open, onClose, gameMode, multiplayer = false }: R
           rulesContent={
             multiplayer ? (
               <>
-                <p>Музыка звучит на общем экране. Отвечай на своём устройстве.</p>
+                <p>
+                  {online
+                    ? "Музыка звучит на твоём устройстве. Матч — 5 раундов."
+                    : "Музыка звучит на общем экране. Отвечай на своём устройстве."}
+                </p>
                 <p>
                   {gameMode === "quiz"
                     ? "Выбери один из четырёх вариантов и подтверди ответ."
                     : "Напиши продолжение, затем выбери лучший чужой ответ."}
                 </p>
                 <p>
-                  Пока ты не ответил, можно повторить фрагмент. Повтор общий для всех, таймер ответа на это
-                  время остановлен.
+                  {online
+                    ? "До ответа можно повторить фрагмент только у себя. Общий таймер продолжает идти; кулдаун равен длине фрагмента."
+                    : "Пока ты не ответил, можно повторить фрагмент. Повтор общий для всех, таймер ответа на это время остановлен."}
                 </p>
-                <p>Паузой управляет ведущий. Меню игрока не останавливает игру.</p>
+                <p>
+                  {online
+                    ? "Ведущего нет. Меню и отключение одного игрока не останавливают матч."
+                    : "Паузой управляет ведущий. Меню игрока не останавливает игру."}
+                </p>
               </>
             ) : (
               <GameRulesCommon scope={rulesScope} />

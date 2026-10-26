@@ -18,7 +18,12 @@ class Socket implements RoomConnection {
   }
 }
 
-async function fixture(testMode = true, publishedRounds?: RoomRuntime["publishedRounds"], playerCount = 3) {
+async function fixture(
+  testMode = true,
+  publishedRounds?: RoomRuntime["publishedRounds"],
+  playerCount = 3,
+  online = false,
+) {
   let stored: StoredRoomState | undefined;
   let alarmAt = 0;
   const sockets: Socket[] = [];
@@ -45,7 +50,7 @@ async function fixture(testMode = true, publishedRounds?: RoomRuntime["published
   const host = connect("host");
   const hello = (socket = host) =>
     send(socket, { type: "host_hello", clientId: "host-client", hostToken: "host-secret-token" });
-  await hello();
+  if (!online) await hello();
   const players: Socket[] = [];
   const join = (socket: Socket, clientId: string, token = `secret-token-${clientId}`) =>
     send(socket, {
@@ -56,6 +61,7 @@ async function fixture(testMode = true, publishedRounds?: RoomRuntime["published
     });
   for (let n = 0; n < playerCount; n++) {
     const socket = connect(`socket-${n}`);
+    if (online) await game.reserveOnline(`client-${n}`, `secret-token-client-${n}`);
     await join(socket, `client-${n}`);
     players.push(socket);
   }
@@ -65,6 +71,21 @@ async function fixture(testMode = true, publishedRounds?: RoomRuntime["published
     while (game.state.hostConnected && target - (game.state.hostLastSeenAt ?? Date.now()) >= 30_000) {
       vi.setSystemTime(Math.max(Date.now(), (game.state.hostLastSeenAt ?? Date.now()) + 29_000));
       await send(host, { type: "ping" });
+    }
+    if (online) {
+      while (
+        Object.values(game.state.playersById).some((p) => p.connected && target - p.lastSeenAt >= 30000)
+      ) {
+        const oldest = Math.min(
+          ...Object.values(game.state.playersById)
+            .filter((p) => p.connected)
+            .map((p) => p.lastSeenAt),
+        );
+        vi.setSystemTime(Math.max(Date.now(), oldest + 29000));
+        for (const player of players)
+          if (player.state?.role === "player" && game.state.playersById[player.state.playerId]?.connected)
+            await send(player, { type: "ping" });
+      }
     }
     vi.setSystemTime(target);
     await game.onAlarm();
@@ -830,4 +851,203 @@ it("preserves an accepted answer and identity through repeated paused replacemen
     expect(f.game.state.manualPaused).toBe(true);
     old = replacement;
   }
+});
+
+describe("hostless online sessions", () => {
+  const playerIds = (f: Awaited<ReturnType<typeof fixture>>) =>
+    f.players.map((p) => (p.state?.role === "player" ? p.state.playerId : ""));
+  async function begin(
+    f: Awaited<ReturnType<typeof fixture>>,
+    mode: "quiz" | "freestyle" = "quiz",
+    loaded = f.players.length,
+  ) {
+    for (const player of f.players) await f.send(player, { type: "player_ready" });
+    expect(f.game.state.phase).toBe("mode_select");
+    if (f.players.length >= 3)
+      for (const player of f.players) await f.send(player, { type: "player_mode_vote", mode });
+    await f.due();
+    expect(f.game.state.phase).toBe("transition");
+    for (const player of f.players.slice(0, loaded))
+      await f.send(player, { type: "player_media_ready", turnId: f.game.state.turnId });
+    await f.due();
+    if (f.game.state.phase === "transition") {
+      vi.setSystemTime(f.game.state.online!.mediaLoadDeadlineAt!);
+      await f.game.onAlarm();
+    }
+    expect(f.game.state.phase).toBe("playing");
+    await f.due();
+  }
+  it("starts with two ready players, needs no host, and rejects host takeover and unreserved joins", async () => {
+    const f = await fixture(true, undefined, 2, true);
+    expect(f.game.state.hostToken).toBeNull();
+    await f.hello();
+    expect(f.host.last).toMatchObject({ type: "error", code: "not_host" });
+    const intruder = f.connect("intruder");
+    await f.join(intruder, "intruder-client");
+    expect(intruder.last).toMatchObject({ type: "error", code: "invalid_room" });
+    await begin(f);
+    expect(f.game.state).toMatchObject({
+      mode: "quiz",
+      totalRounds: 5,
+      phase: "quiz_answering",
+      pausedAt: null,
+      hostConnected: false,
+    });
+    const deadline = f.game.state.deadlineAt;
+    await f.restart();
+    expect(f.game.state.pausedAt).toBeNull();
+    expect(f.game.state.deadlineAt).toBe(deadline);
+    expect(await f.game.reserveOnline("late-client", "secret-token-late-client")).toBe(false);
+  });
+  it("removes unready players after the lobby deadline and starts for the ready pair", async () => {
+    const f = await fixture(true, undefined, 3, true);
+    await f.send(f.players[0]!, { type: "player_ready" });
+    await f.send(f.players[1]!, { type: "player_ready" });
+    vi.setSystemTime(f.game.state.online!.readyDeadlineAt!);
+    await f.game.onAlarm();
+    expect(f.players[2]!.messages).toContainEqual({ type: "player_left" });
+    expect(f.game.state.phase).toBe("mode_select");
+    expect(f.game.state.initialVote?.decision?.mode).toBe("quiz");
+  });
+  it("returns a lone ready player to search and rechecks mode quorum before starting", async () => {
+    const waiting = await fixture(true, undefined, 2, true);
+    await waiting.send(waiting.players[0]!, { type: "player_ready" });
+    vi.setSystemTime(waiting.game.state.online!.readyDeadlineAt!);
+    await waiting.game.onAlarm();
+    for (const p of waiting.players) expect(p.messages).toContainEqual({ type: "player_left" });
+    expect(Object.keys(waiting.game.state.playersById)).toHaveLength(0);
+    const f = await fixture(true, undefined, 3, true);
+    for (const p of f.players) await f.send(p, { type: "player_ready" });
+    await f.send(f.players[0]!, { type: "player_mode_vote", mode: "freestyle" });
+    await f.send(f.players[1]!, { type: "player_mode_vote", mode: "freestyle" });
+    await f.close(f.players[2]!);
+    expect(f.game.state.initialVote?.decision?.mode).toBe("quiz");
+    await f.due();
+    expect(f.game.state.mode).toBe("quiz");
+  });
+  it("caps reservations at six and refuses a new participant who arrives after roster lock", async () => {
+    const f = await fixture(true, undefined, 6, true);
+    expect(await f.game.reserveOnline("client-too-many", "secret-token-too-many")).toBe(false);
+    const pair = await fixture(true, undefined, 2, true);
+    expect(await pair.game.reserveOnline("client-late", "secret-token-client-late")).toBe(true);
+    for (const p of pair.players) await pair.send(p, { type: "player_ready" });
+    const late = pair.connect("late-reserved-socket");
+    await pair.join(late, "client-late");
+    expect(late.messages).toContainEqual({ type: "player_left" });
+    expect(await pair.game.reserveOnline("client-late", "secret-token-client-late")).toBe(false);
+  });
+  it("times out mode voting to quiz and excludes an unloaded client from answering and voting", async () => {
+    const f = await fixture(true, undefined, 3, true);
+    for (const p of f.players) await f.send(p, { type: "player_ready" });
+    vi.setSystemTime(f.game.state.online!.modeVoteDeadlineAt!);
+    await f.game.onAlarm();
+    expect(f.game.state.initialVote?.decision?.mode).toBe("quiz");
+    await f.due();
+    for (const p of f.players.slice(0, 2))
+      await f.send(p, { type: "player_media_ready", turnId: f.game.state.turnId });
+    vi.setSystemTime(f.game.state.online!.mediaLoadDeadlineAt!);
+    await f.game.onAlarm();
+    await f.due();
+    await f.send(f.players[2]!, {
+      type: "player_quiz_answer",
+      turnId: f.game.state.turnId,
+      answer: { variant: "mc4", selectedIndex: 0 },
+    });
+    expect(f.players[2]!.last).toMatchObject({ type: "error", code: "bad_phase" });
+    expect(f.game.state.online!.eligiblePlayerIds).toHaveLength(2);
+    expect(f.game.state.quiz!.answeredPlayerIds).toHaveLength(0);
+    expect(f.game.state.pausedAt).toBeNull();
+  });
+  it("keeps replay private, enforces cooldown and keeps the authoritative answer deadline", async () => {
+    const f = await fixture(true, undefined, 2, true);
+    await begin(f);
+    const ids = playerIds(f);
+    const deadline = f.game.state.deadlineAt;
+    await f.send(f.players[0]!, { type: "player_replay", turnId: f.game.state.turnId });
+    const replay = f.game.state.onlineReplays![ids[0]!]!;
+    expect(replay.endsAt).toBeGreaterThan(replay.startedAt);
+    expect(f.game.state.deadlineAt).toBe(deadline);
+    expect(f.game.state.replay).toBeNull();
+    const other = f.players[1]!.last;
+    expect(other.type === "snapshot" && other.you.own?.personalReplay).toBeNull();
+    await f.send(f.players[0]!, { type: "player_replay", turnId: f.game.state.turnId });
+    expect(f.game.state.onlineReplays![ids[0]!]).toEqual(replay);
+    await f.send(f.players[0]!, {
+      type: "player_quiz_answer",
+      turnId: f.game.state.turnId,
+      answer: { variant: "mc4", selectedIndex: 0 },
+    });
+    const own = f.players[0]!.last;
+    expect(own.type === "snapshot" && own.you.own?.personalReplay).toEqual(replay);
+    expect(JSON.stringify(other)).not.toContain("onlineReservations");
+    expect(JSON.stringify(other)).not.toContain("secret-token");
+  });
+  it("continues timers on disconnect, allows token-bound recovery and ends early after quorum grace", async () => {
+    const f = await fixture(true, undefined, 3, true);
+    await begin(f, "freestyle");
+    const ids = playerIds(f);
+    const deadline = f.game.state.deadlineAt;
+    await f.close(f.players[2]!);
+    expect(f.game.state.pausedAt).toBeNull();
+    expect(f.game.state.deadlineAt).toBe(deadline);
+    expect(f.game.state.online!.quorumDeadlineAt).not.toBeNull();
+    const replacement = f.connect("replacement-online");
+    await f.join(replacement, "client-2");
+    expect(replacement.state).toMatchObject({ role: "player", playerId: ids[2] });
+    expect(f.game.state.online!.quorumDeadlineAt).toBeNull();
+    await f.close(replacement);
+    const grace = f.game.state.online!.quorumDeadlineAt!;
+    for (let n = 0; n < 3; n++) {
+      vi.setSystemTime(Date.now() + 10000);
+      for (const p of f.players.slice(0, 2)) await f.send(p, { type: "ping" });
+    }
+    vi.setSystemTime(grace);
+    await f.game.onAlarm();
+    expect(f.game.state.phase).toBe("finished");
+    expect(f.game.state.online!.endedEarly).toBe(true);
+    expect(f.game.state.pausedAt).toBeNull();
+  });
+  it("runs five freestyle rounds and rematches the same ready players without a host", async () => {
+    const f = await fixture(true, undefined, 3, true);
+    await begin(f, "freestyle");
+    for (let round = 0; round < 5; round++) {
+      expect(f.game.state.phase).toBe("freestyle_submitting");
+      for (const p of f.players)
+        await f.send(p, {
+          type: "player_freestyle_submit",
+          turnId: f.game.state.turnId,
+          text: "произвольный ответ",
+        });
+      const ids = playerIds(f);
+      for (const option of f.game.state.freestyle!.votingOptions) {
+        expect(ids).not.toContain(option.submissionId);
+        expect(option.submittedAt).toBe(0);
+      }
+      for (let n = 0; n < 3; n++)
+        await f.send(f.players[n]!, {
+          type: "player_vote",
+          turnId: f.game.state.turnId,
+          submissionId: f.game.state.onlineSubmissionIds![ids[(n + 1) % 3]!]!,
+        });
+      expect(f.game.state.phase).toBe("round_results");
+      await f.due();
+      if (round < 4) {
+        for (const p of f.players)
+          await f.send(p, { type: "player_media_ready", turnId: f.game.state.turnId });
+        await f.due();
+        await f.due();
+      }
+    }
+    expect(f.game.state.phase).toBe("finished");
+    expect(f.game.state.online!.endedEarly).toBe(false);
+    const ids = playerIds(f);
+    const completedScore = f.game.state.playersById[ids[0]!]!.score;
+    await f.send(f.players[0]!, { type: "player_leave" });
+    expect(f.game.state.playersById[ids[0]!]!.score).toBe(completedScore);
+    for (const p of f.players.slice(1)) await f.send(p, { type: "player_rematch" });
+    expect(f.game.state.phase).toBe("mode_select");
+    expect(Object.keys(f.game.state.playersById)).toHaveLength(2);
+    expect(f.game.state.initialVote?.decision?.mode).toBe("quiz");
+    expect(f.game.state.hostToken).toBeNull();
+  });
 });

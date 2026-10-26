@@ -4,6 +4,15 @@ import { testGate } from "../server/testGate";
 const secret = "private-test-secret-not-a-real-credential";
 const identity = { clientId: "client-12345", room: "ABC123", role: "host" as const };
 describe("room admission security", () => {
+  it("keeps matchmaking admission separate from every room ticket", async () => {
+    const who = { clientId: "client-12345", room: "ONLINE", role: "player" as const };
+    const queue = await mintTicket(secret, who, 1000, "queue-admission-v1");
+    const room = await mintTicket(secret, who, 1000);
+    expect(await verifyTicket(secret, queue, "ONLINE", 2000)).toBeNull();
+    expect(await verifyTicket(secret, room, "ONLINE", 2000, "queue-admission-v1")).toBeNull();
+    expect(await verifyTicket(secret, queue, "ABC123", 2000, "queue-admission-v1")).toBeNull();
+    expect(await verifyTicket(secret, queue, "ONLINE", 2000, "queue-admission-v1")).toMatchObject(who);
+  });
   it("binds signed tickets to room, expiry and untouched payload", async () => {
     const t = await mintTicket(secret, identity, 1000);
     expect(await verifyTicket(secret, t, "ABC123", 2000)).toMatchObject(identity);

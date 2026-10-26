@@ -681,3 +681,54 @@
     transition: none !important;
   }
 }
+
+.multiplayer-format-choice {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.multiplayer-format-choice .btn {
+  flex: 1;
+  text-align: center;
+  text-decoration: none;
+}
+.online-roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.online-roster li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #ffffff22;
+}
+.online-roster strong {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.online-roster span {
+  text-align: right;
+  color: #c8daf4;
+  flex-shrink: 0;
+}
+.online-notice {
+  position: fixed;
+  z-index: 50;
+  bottom: calc(90px + var(--safe-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(90%, 550px);
+  padding: 12px;
+  border-radius: 10px;
+  background: #101827f2;
+  color: white;
+  text-align: center;
+  font-size: 14px;
+}
+.online-notice .btn {
+  margin-top: 8px;
+}

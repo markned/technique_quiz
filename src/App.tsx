@@ -20,6 +20,7 @@ import { getGuessSeconds } from "./helpers/quizConfig";
 import { useQuizGame } from "./hooks/useQuizGame";
 import { MultiplayerHostApp, MultiplayerPlayerApp } from "./multiplayer/MultiplayerApps";
 import { MultiplayerEntryScreen } from "./multiplayer/MultiplayerEntryScreen";
+import { OnlineSearchScreen } from "./multiplayer/OnlineSearchScreen";
 import { parseAppRoute } from "./multiplayer/routes";
 
 function LocalGameApp({
@@ -259,7 +260,14 @@ function HomeApp() {
           ← Назад
         </button>
         {room ? (
-          <a className="recent-room" href={`/room/${room.code}/${room.role === "host" ? "host" : "player"}`}>
+          <a
+            className="recent-room"
+            href={
+              room.online
+                ? `/online/${room.code}`
+                : `/room/${room.code}/${room.role === "host" ? "host" : "player"}`
+            }
+          >
             Вернуться в комнату {room.code} · {room.role === "host" ? "Ведущий" : "Игрок"}
           </a>
         ) : null}
@@ -301,6 +309,8 @@ function isPreviewRoute(): boolean {
 export default function App() {
   const route = useMemo(() => parseAppRoute(), []);
   if (isPreviewRoute()) return <LocalGameApp />;
+  if (route.kind === "online")
+    return route.code ? <MultiplayerPlayerApp code={route.code} online /> : <OnlineSearchScreen />;
   if (route.kind === "host") {
     return (
       <>

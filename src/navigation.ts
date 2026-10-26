@@ -23,7 +23,7 @@ export function useMenuStage() {
     },
   ] as const;
 }
-export type RecentRoom = { code: string; role: "host" | "player"; expiresAt: number };
+export type RecentRoom = { code: string; role: "host" | "player"; expiresAt: number; online?: boolean };
 const key = "technique_quiz_recent_room";
 export function recentRoom(): RecentRoom | null {
   try {

@@ -5,7 +5,9 @@ import { AdmissionPanel } from "./admission";
 import { forgetRoom } from "../navigation";
 import { RoomMenu } from "./RoomMenu";
 import { LyricsPanel } from "../components/LyricsPanel";
-import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
+import { FormEvent, createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { MasterVolumeControl } from "../components/MasterVolumeControl";
+import { useOnlineAudio } from "./useOnlineAudio";
 import { minimumPlayersForMode } from "./types";
 import type { ClientMessage } from "./messages";
 import type { LeaderboardRow, PublicRoomState, RoomCode, PrivatePlayerState } from "./types";
@@ -35,6 +37,8 @@ import { Timer } from "../components/Timer";
 import { useQuizContentFit } from "../hooks/useQuizContentFit";
 import { TransitionOverlay } from "../components/TransitionOverlay";
 import { multiplayerRoundBackground } from "../helpers/roundBackground";
+
+const PersonalReplayContext = createContext<PrivatePlayerState["personalReplay"]>(null);
 
 function roomTimer(state: PublicRoomState) {
   const round = state.round ?? roundById(state.currentRoundId);
@@ -89,33 +93,38 @@ function ReplayButton({
   playerId: string;
   send: (message: ClientMessage) => boolean;
 }) {
+  const personalReplay = useContext(PersonalReplayContext);
   const [now, tick] = useState(Date.now);
+  const replay = state.online
+    ? personalReplay && personalReplay.endsAt > now
+      ? personalReplay
+      : null
+    : state.replay;
+  const replayId = replay?.id;
   useEffect(() => {
-    if (!state.replay || state.pausedAt) return;
+    if (!replayId || state.pausedAt) return;
     const t = setInterval(() => tick(Date.now()), 200);
     return () => clearInterval(t);
-  }, [state.replay, state.pausedAt]);
+  }, [replayId, state.pausedAt]);
   const done =
     state.phase === "quiz_answering"
       ? state.quiz?.answeredPlayerIds.includes(playerId)
       : state.freestyle?.submittedPlayerIds.includes(playerId);
   if (!["quiz_answering", "freestyle_submitting"].includes(state.phase) || done) return null;
-  const seconds = state.replay?.endsAt
-    ? Math.max(0, Math.ceil((state.replay.endsAt - (state.pausedAt ?? now)) / 1000))
+  const seconds = replay?.endsAt
+    ? Math.max(0, Math.ceil((replay.endsAt - (state.pausedAt ?? now)) / 1000))
     : 0;
   return (
     <button
       type="button"
       className="dock-btn dock-btn-replay multiplayer-replay"
-      aria-label={
-        state.replay ? (seconds ? `Повтор · ${seconds} с` : "Готовим повтор…") : "Повторить фрагмент"
-      }
+      aria-label={replay ? (seconds ? `Повтор · ${seconds} с` : "Готовим повтор…") : "Повторить фрагмент"}
       title="Повторить фрагмент"
-      disabled={!!state.replay || !!state.pausedAt}
+      disabled={!!replay || !!state.pausedAt}
       onClick={() => send({ type: "player_replay", turnId: state.turnId })}
     >
       <ReplayWithPlayIcon />
-      {state.replay ? (
+      {replay ? (
         <span className="multiplayer-replay-count" aria-hidden="true">
           {seconds || "…"}
         </span>
@@ -877,14 +886,16 @@ function PlayerFinal({
   state,
   playerId,
   send,
+  onlineActions,
 }: {
   state: PublicRoomState;
   playerId: string;
   send: (message: ClientMessage) => boolean;
+  onlineActions?: ReactNode;
 }) {
   const me = state.leaderboard.find((row) => row.playerId === playerId);
   const score = me?.score ?? 0;
-  const winner = score > 0 && me?.rank === 1;
+  const winner = !state.online?.endedEarly && score > 0 && me?.rank === 1;
   const index = state.mode === "quiz" ? outroQuizVideoIndexForScore(score) : winner ? 4 : 0;
   const video = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
@@ -900,26 +911,30 @@ function PlayerFinal({
   }, [src]);
   return (
     <main className="app-shell multiplayer-player-final">
-      <video
-        ref={video}
-        className="multiplayer-personal-video"
-        src={src}
-        autoPlay
-        playsInline
-        muted={muted}
-        loop
-        onPlaying={() => setBlocked(false)}
-      />
+      {!state.online?.endedEarly ? (
+        <video
+          ref={video}
+          className="multiplayer-personal-video"
+          src={src}
+          autoPlay
+          playsInline
+          muted={muted}
+          loop
+          onPlaying={() => setBlocked(false)}
+        />
+      ) : null}
       <div className="multiplayer-personal-summary">
         <p className="multiplayer-eyebrow">
           {me?.name} · {state.mode === "quiz" ? "Викторина" : "Фристайл"}
         </p>
         <h1>
-          {state.mode === "quiz"
-            ? `Верных ответов: ${score} из ${state.totalRounds}`
-            : winner
-              ? "Победа"
-              : "Поражение"}
+          {state.online?.endedEarly
+            ? "Матч завершён досрочно"
+            : state.mode === "quiz"
+              ? `Верных ответов: ${score} из ${state.totalRounds}`
+              : winner
+                ? "Победа"
+                : "Поражение"}
         </h1>
         <p>
           Место: {me?.rank ?? "—"} · {score} очк.
@@ -943,7 +958,17 @@ function PlayerFinal({
             Воспроизвести ролик
           </button>
         ) : null}
-        <FinalVotePanel state={state} playerId={playerId} send={send} />
+        {state.online?.endedEarly ? (
+          <p>Недостаточно участников или фрагмент не загрузился. Победитель не определяется.</p>
+        ) : null}
+        {onlineActions ? (
+          <>
+            <Leaderboard rows={state.leaderboard} title="Итоги матча" finale />
+            {onlineActions}
+          </>
+        ) : (
+          <FinalVotePanel state={state} playerId={playerId} send={send} />
+        )}
       </div>
     </main>
   );
@@ -1339,7 +1364,9 @@ function PlayerVote({
 }) {
   if (state.freestyle?.votedPlayerIds.includes(playerId))
     return <PlayerWaiting state={state} playerId={playerId} title="Голос принят" own={own} />;
-  const options = (state.freestyle?.votingOptions ?? []).filter((option) => option.submissionId !== playerId);
+  const options = (state.freestyle?.votingOptions ?? []).filter(
+    (option) => option.submissionId !== (own?.submissionId ?? playerId),
+  );
   return (
     <MultiplayerScene state={state}>
       <div className="quiz-screen">
@@ -1372,20 +1399,26 @@ function PlayerVote({
   );
 }
 
-export function MultiplayerPlayerApp({ code }: { code: RoomCode }) {
+export function MultiplayerPlayerApp({ code, online = false }: { code: RoomCode; online?: boolean }) {
   if (code.length !== 6) return <InvalidRoomCodeScreen code={code} />;
-  return <MultiplayerPlayerRoom code={code} />;
+  return <MultiplayerPlayerRoom code={code} online={online} />;
 }
 
-function MultiplayerPlayerRoom({ code }: { code: RoomCode }) {
+function MultiplayerPlayerRoom({ code, online }: { code: RoomCode; online: boolean }) {
   const [name, setName] = useState(getSavedPlayerName);
   const room = usePartyRoom({ code, role: "player", playerName: name, enabled: !!name });
+  const audio = useOnlineAudio(room.state, room.you?.playerId, room.you?.own, room.send);
+  const exitTarget = useRef("/online");
+  const leaveOnline = (path: string) => {
+    exitTarget.current = path;
+    room.send({ type: "player_leave" });
+  };
   useEffect(() => {
     if (room.left) {
       forgetRoom();
-      window.location.href = "/#menu";
+      window.location.href = online || room.state?.online ? exitTarget.current : "/#menu";
     }
-  }, [room.left]);
+  }, [room.left, online, room.state?.online]);
   if (!name)
     return (
       <>
@@ -1410,6 +1443,23 @@ function MultiplayerPlayerRoom({ code }: { code: RoomCode }) {
         </section>
       </main>
     );
+  } else if (state.online && state.phase === "lobby") {
+    content = (
+      <OnlineLobby
+        state={state}
+        playerId={playerId}
+        onReady={async () => {
+          await audio.unlock();
+          room.send({ type: "player_ready" });
+        }}
+      />
+    );
+  } else if (
+    state.online &&
+    ["quiz_answering", "freestyle_submitting", "freestyle_voting"].includes(state.phase) &&
+    !state.online.eligiblePlayerIds.includes(playerId)
+  ) {
+    content = <PlayerWaiting state={state} playerId={playerId} title="Этот раунд пропущен" own={own} />;
   } else if (
     state.pausedAt &&
     !["quiz_answering", "freestyle_submitting", "freestyle_voting"].includes(state.phase)
@@ -1423,7 +1473,12 @@ function MultiplayerPlayerRoom({ code }: { code: RoomCode }) {
       />
     );
   } else if (state.phase === "mode_select") {
-    content = <InitialModeVote state={state} playerId={playerId} send={room.send} />;
+    content =
+      state.online && state.players.filter((p) => p.connected).length === 2 ? (
+        <PlayerWaiting state={state} playerId={playerId} title="Запускаем викторину" />
+      ) : (
+        <InitialModeVote state={state} playerId={playerId} send={room.send} />
+      );
   } else if (state.phase === "quiz_answering") {
     content = <PlayerQuizController state={state} playerId={playerId} send={room.send} own={own} />;
   } else if (state.phase === "freestyle_submitting") {
@@ -1441,7 +1496,24 @@ function MultiplayerPlayerRoom({ code }: { code: RoomCode }) {
   } else if (state.phase === "round_results") {
     content = <PlayerWaiting state={state} playerId={playerId} title="Итоги раунда" own={own} />;
   } else if (state.phase === "finished") {
-    content = <PlayerFinal state={state} playerId={playerId} send={room.send} />;
+    content = (
+      <PlayerFinal
+        state={state}
+        playerId={playerId}
+        send={room.send}
+        onlineActions={
+          state.online ? (
+            <OnlineFinalActions
+              state={state}
+              playerId={playerId}
+              send={room.send}
+              onFindNew={() => leaveOnline("/online?fresh=1")}
+              onMenu={() => leaveOnline("/#multiplayer")}
+            />
+          ) : undefined
+        }
+      />
+    );
   } else {
     content = (
       <PlayerWaiting
@@ -1452,7 +1524,9 @@ function MultiplayerPlayerRoom({ code }: { code: RoomCode }) {
             ? "Слушаем фрагмент"
             : state.phase === "transition"
               ? "Следующий раунд"
-              : "Ждём ведущий экран"
+              : state.online
+                ? "Поиск игроков"
+                : "Ждём ведущий экран"
         }
         own={own}
       />
@@ -1461,9 +1535,121 @@ function MultiplayerPlayerRoom({ code }: { code: RoomCode }) {
   return (
     <>
       <RestoredToast visible={!!room.you?.reconnected} />
-      <RoomMenu state={state} role="player" send={room.send} />
-      {content}
+      <RoomMenu
+        state={state}
+        role="player"
+        send={room.send}
+        onExit={state?.online ? () => leaveOnline("/#multiplayer") : undefined}
+      />
+      {online || state?.online ? <MasterVolumeControl /> : null}
+      {state?.online?.quorumDeadlineAt ? (
+        <div className="online-notice" role="status">
+          Недостаточно игроков. Ждём возвращения до{" "}
+          <CountdownPill label="Завершение" targetAt={state.online.quorumDeadlineAt} />
+        </div>
+      ) : null}
+      {audio.error ? (
+        <div className="online-notice" role="alert">
+          {audio.error}
+          <button className="btn" onClick={() => void audio.unlock().catch(() => {})}>
+            Включить звук
+          </button>
+        </div>
+      ) : null}
+      <PersonalReplayContext.Provider value={own?.personalReplay}>{content}</PersonalReplayContext.Provider>
     </>
+  );
+}
+
+function OnlineLobby({
+  state,
+  playerId,
+  onReady,
+}: {
+  state: PublicRoomState;
+  playerId: string;
+  onReady: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const ready = state.online!.readyPlayerIds.includes(playerId);
+  return (
+    <main className="app-shell rules-screen-shell multiplayer-shell multiplayer-entry-shell">
+      <section className="rules-screen-card multiplayer-panel multiplayer-menu-card">
+        <p className="multiplayer-eyebrow">Онлайн-матч · {state.code}</p>
+        <h1 className="rules-screen-title">Лобби</h1>
+        <p role="status">
+          {state.players.filter((p) => p.connected).length < 2
+            ? "Ищем соперников… Нужен ещё один игрок."
+            : `Готовы ${state.online!.readyPlayerIds.length} из ${state.players.filter((p) => p.connected).length}`}
+        </p>
+        <p>До 6 игроков. Когда все готовы, матч начнётся сразу. Двое — викторина, от трёх — выбор режима.</p>
+        <ul className="online-roster">
+          {state.players.map((p) => (
+            <li key={p.id}>
+              <strong>{p.name}</strong>
+              <span>
+                {!p.connected
+                  ? "Нет связи"
+                  : state.online!.readyPlayerIds.includes(p.id)
+                    ? "Готов"
+                    : "Ожидаем готовность"}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <CountdownPill label="Подтверди готовность" targetAt={state.online!.readyDeadlineAt} />
+        <p className="multiplayer-muted">Звук будет на этом устройстве. Меню не останавливает матч.</p>
+        <button
+          className="btn btn-primary"
+          disabled={ready || busy}
+          onClick={() => {
+            setBusy(true);
+            setError("");
+            void onReady()
+              .catch(() => setError("Не удалось включить звук. Нажми «Готов» ещё раз."))
+              .finally(() => setBusy(false));
+          }}
+        >
+          {ready ? "Вы готовы" : busy ? "Включаем звук…" : "Готов"}
+        </button>
+        {error ? <p role="alert">{error}</p> : null}
+      </section>
+    </main>
+  );
+}
+
+function OnlineFinalActions({
+  state,
+  playerId,
+  send,
+  onFindNew,
+  onMenu,
+}: {
+  state: PublicRoomState;
+  playerId: string;
+  send: (m: ClientMessage) => boolean;
+  onFindNew: () => void;
+  onMenu: () => void;
+}) {
+  const selected = state.online!.rematchPlayerIds.includes(playerId);
+  return (
+    <section className="multiplayer-final-vote" aria-label="Следующий онлайн-матч">
+      <button
+        className="btn btn-primary"
+        disabled={selected}
+        onClick={() => send({ type: "player_rematch" })}
+      >
+        {selected ? "Ждём остальных" : "Ещё матч с этими игроками"}
+      </button>
+      <CountdownPill label="Следующий матч" targetAt={state.online!.rematchDeadlineAt} />
+      <button className="btn" onClick={onFindNew}>
+        Найти новых соперников
+      </button>
+      <button className="btn" onClick={onMenu}>
+        В меню
+      </button>
+    </section>
   );
 }
 

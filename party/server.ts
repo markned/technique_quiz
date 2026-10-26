@@ -1,6 +1,15 @@
 /// <reference path="../worker-bindings.d.ts" />
 import { testGate } from "../server/testGate";
-import { admission, localSecurityBypass, verifyTicket, type SecurityEnv } from "../server/security";
+import {
+  admission,
+  localSecurityBypass,
+  mintTicket,
+  verifyTicket,
+  type SecurityEnv,
+} from "../server/security";
+import { SearchSchema } from "../server/matchmaking";
+import { readRequestBody } from "../server/requestBody";
+export { OnlineCoordinator } from "../server/onlineCoordinator";
 import { parseClientMessage } from "../src/multiplayer/messages";
 import { Server, routePartykitRequest, type Connection, type ConnectionContext } from "partyserver";
 import { QuizRoom, type RoomConnection } from "../server/room";
@@ -106,8 +115,26 @@ export class TechniqueQuizRoom extends Server<Env> {
   onAlarm() {
     return this.run(() => this.game.onAlarm());
   }
-  onRequest() {
-    return this.run(() => this.game.onRequest());
+  onRequest(request: Request) {
+    return this.run(async () => {
+      const path = new URL(request.url).pathname;
+      if (path.startsWith("/internal/online/") && request.method === "POST") {
+        const body = JSON.parse(new TextDecoder().decode(await readRequestBody(request, 4096)));
+        const who = SearchSchema.parse({ clientId: body.clientId, playerToken: body.token });
+        if (path.endsWith("/release")) {
+          await this.game.releaseOnline(who.clientId, who.playerToken);
+          return Response.json({ ok: true });
+        }
+        if (path.endsWith("/reserve")) {
+          const accepted = await this.game.reserveOnline(who.clientId, who.playerToken);
+          return Response.json({
+            accepted,
+            open: !!this.game.state.online && this.game.state.phase === "lobby",
+          });
+        }
+      }
+      return this.game.onRequest();
+    });
   }
 }
 
@@ -181,6 +208,45 @@ const app = {
           return response;
         } catch {
           return Response.json({ error: "Не удалось подтвердить подключение." }, { status: 400, headers });
+        }
+      }
+      if (path === "/api/online/search") {
+        if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers });
+        try {
+          const who = SearchSchema.parse(
+            JSON.parse(new TextDecoder().decode(await readRequestBody(request, 4096))),
+          );
+          const ticket = request.headers.get("Authorization")?.replace(/^Bearer /, "") ?? "";
+          const claim =
+            !bypass && env.ADMISSION_SECRET
+              ? await verifyTicket(env.ADMISSION_SECRET, ticket, "ONLINE", Date.now(), "queue-admission-v1")
+              : null;
+          if (!bypass && (!claim || claim.role !== "player" || claim.clientId !== who.clientId))
+            return Response.json({ error: "Подтверди вход в поиск." }, { status: 403, headers });
+          const pool =
+            env.TEST_MODE === "true" && who.clientId.startsWith("E2E_")
+              ? "e2e-fast-v1"
+              : env.TEST_MODE === "true" && who.clientId.startsWith("QA_REAL_")
+                ? "e2e-media-v1"
+                : "public-v1";
+          const response = await env.Online.get(env.Online.idFromName(pool)).fetch(
+            new Request("https://internal/search", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(who),
+            }),
+          );
+          if (!response.ok) return new Response(response.body, { status: response.status, headers });
+          const { code } = await response.json<{ code: string }>();
+          const roomTicket = bypass
+            ? "local"
+            : await mintTicket(env.ADMISSION_SECRET!, { room: code, role: "player", clientId: who.clientId });
+          return Response.json({ code, ticket: roomTicket }, { headers });
+        } catch {
+          return Response.json(
+            { error: "Не удалось найти игру. Повтори попытку." },
+            { status: 400, headers },
+          );
         }
       }
       const response = await env.Community.get(env.Community.idFromName("catalog")).fetch(request);

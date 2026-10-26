@@ -101,6 +101,11 @@ export function getOrCreatePlayerToken(code: RoomCode): string {
   return token;
 }
 
+export function rememberOnlineAssignment(code: RoomCode, token: string, ticket: string) {
+  safeLocalStorage().setItem(`technique_quiz_multiplayer_player_token:${code}`, token);
+  safeLocalStorage().setItem(`technique_admission:player:${code}`, ticket);
+}
+
 export function adoptHostToken(code: RoomCode): void {
   const params = new URLSearchParams(window.location.hash.slice(1));
   const token = params.get("screen");

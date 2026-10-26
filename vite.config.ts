@@ -36,10 +36,11 @@ export default defineConfig(({ command }) => ({
     host: "0.0.0.0",
     proxy: {
       "/parties": { target: "http://127.0.0.1:1999", ws: true },
-      "^/api/(security|admission|catalog|setup|login|register|me|logout|invites|users|media|rounds)(/|$)": {
-        target: "http://127.0.0.1:1999",
-        headers: { Origin: "http://localhost:18768" },
-      },
+      "^/api/(security|admission|online|catalog|setup|login|register|me|logout|invites|users|media|rounds)(/|$)":
+        {
+          target: "http://127.0.0.1:1999",
+          headers: { Origin: "http://localhost:18768" },
+        },
     },
     strictPort: true,
   },

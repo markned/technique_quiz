@@ -24,7 +24,15 @@ export function MultiplayerEntryScreen() {
     <main className="app-shell rules-screen-shell multiplayer-shell multiplayer-entry-shell">
       <section className="rules-screen-card multiplayer-panel multiplayer-menu-card">
         <p className="multiplayer-eyebrow">Мультиплеер</p>
-        <h1 className="rules-screen-title">Комната игры</h1>
+        <nav className="multiplayer-format-choice" aria-label="Формат мультиплеера">
+          <button className="btn btn-primary" type="button" aria-pressed="true">
+            Общий экран
+          </button>
+          <a className="btn" href="/online?fresh=1">
+            Онлайн-матч
+          </a>
+        </nav>
+        <h1 className="rules-screen-title">Общий экран</h1>
         <p className="multiplayer-muted">
           Создай комнату на главном экране или введи код, если подключаешься с телефона.
         </p>

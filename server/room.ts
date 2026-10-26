@@ -80,6 +80,9 @@ export type StoredRoomState = Omit<
   playerIdByClientId: Record<string, PlayerId>;
   roundOrderIds: number[];
   priorCorrectAnswers: string[];
+  onlineReservations?: Record<string, { token: string; expiresAt: number }>;
+  onlineReplays?: Record<PlayerId, { id: string; startedAt: number; endsAt: number }>;
+  onlineSubmissionIds?: Record<PlayerId, string>;
   quiz: StoredQuizState | null;
   freestyle: StoredFreestyleState | null;
   nextAdvanceAt: number | null;
@@ -107,11 +110,11 @@ function guessSecondsFor(revealLineCount: number): number {
   return revealLineCount <= 1 ? 30 : revealLineCount === 2 ? 45 : 60;
 }
 
-function orderedPlayers(state: StoredRoomState): PublicPlayer[] {
+function orderedPlayers(state: StoredRoomState): Array<StoredRoomState["playersById"][string]> {
   return Object.values(state.playersById).sort((a, b) => a.joinedAt - b.joinedAt || a.id.localeCompare(b.id));
 }
 
-function activePlayers(state: StoredRoomState): PublicPlayer[] {
+function activePlayers(state: StoredRoomState): Array<StoredRoomState["playersById"][string]> {
   return orderedPlayers(state).filter((player) => player.connected);
 }
 
@@ -198,7 +201,8 @@ export class QuizRoom {
         (c) => c.state?.role === "player" && c.state.playerId === player.id,
       );
     }
-    if (!this.state.hostConnected && this.isActive() && !this.state.pausedAt) this.state.pausedAt = nowMs();
+    if (!this.state.online && !this.state.hostConnected && this.isActive() && !this.state.pausedAt)
+      this.state.pausedAt = nowMs();
     await this.advanceDue();
     await this.save();
   }
@@ -241,6 +245,10 @@ export class QuizRoom {
       return;
     }
     if (message.type === "host_hello") {
+      if (this.state.online) {
+        this.sendError(connection, "not_host", "В онлайн-матче нет ведущего.");
+        return;
+      }
       await this.handleHostHello(message.clientId, message.hostToken, connection);
       return;
     }
@@ -307,6 +315,14 @@ export class QuizRoom {
       return;
     }
     if (message.type === "ping") {
+      if (this.state.online && meta.role === "player") {
+        const player = this.state.playersById[meta.playerId];
+        if (player) {
+          player.lastSeenAt = nowMs();
+          player.connected = true;
+          await this.save();
+        }
+      }
       if (meta.role === "host" && connection.id === this.state.activeHostConnectionId) {
         if (!this.state.hostConnected) {
           await this.handleHostHello(meta.clientId, meta.hostToken, connection);
@@ -412,7 +428,7 @@ export class QuizRoom {
     playerToken: string,
     connection: RoomConnection,
   ) {
-    if (!this.state.hostToken) {
+    if (!this.state.hostToken && !this.state.online) {
       this.sendError(connection, "invalid_room", "Комната не найдена. Проверь код.");
       return;
     }
@@ -421,15 +437,26 @@ export class QuizRoom {
       candidate && this.state.playerTokens[candidate] === playerToken ? candidate : undefined;
     const existing = existingId ? this.state.playersById[existingId] : undefined;
     const ts = nowMs();
+    if (this.state.online) {
+      const reservation = this.state.onlineReservations?.[clientId];
+      if (!reservation || reservation.token !== playerToken || (!existing && reservation.expiresAt < ts)) {
+        this.sendError(connection, "invalid_room", "Войди в онлайн-матч через поиск.");
+        return;
+      }
+    }
 
     if (
       !existing &&
       (this.state.rosterLocked || !["lobby", "mode_select", "finished"].includes(this.state.phase))
     ) {
+      if (this.state.online) {
+        connection.send(JSON.stringify({ type: "player_left" } satisfies ServerMessage));
+        return;
+      }
       this.sendError(connection, "bad_phase", "Состав уже определён. Дождись завершения игры.");
       return;
     }
-    if (!existing && orderedPlayers(this.state).length >= MAX_PLAYERS) {
+    if (!existing && orderedPlayers(this.state).length >= this.state.maxPlayers) {
       this.sendError(connection, "room_full", "Room is already full.");
       return;
     }
@@ -448,8 +475,409 @@ export class QuizRoom {
     this.state.playerTokens[playerId] = playerToken;
     this.state.updatedAt = ts;
     connection.setState({ role: "player", clientId, playerId });
+    if (this.state.online) {
+      this.updateOnlineLobby();
+      if (activePlayers(this.state).length >= minimumPlayersForMode(this.state.mode))
+        this.state.online.quorumDeadlineAt = null;
+    }
     this.resolveFinalVotes();
     await this.persistAndBroadcast(connection, "player", !!existing);
+  }
+
+  /** Called only through the internal Durable Object binding, never a client message. */
+  async reserveOnline(clientId: string, token: string): Promise<boolean> {
+    await this.advanceDue();
+    if (!this.state.online) {
+      if (this.state.hostToken || Object.keys(this.state.playersById).length || this.state.phase !== "lobby")
+        return false;
+      this.state.online = {
+        readyPlayerIds: [],
+        readyDeadlineAt: null,
+        modeVoteDeadlineAt: null,
+        mediaReadyPlayerIds: [],
+        mediaLoadDeadlineAt: null,
+        eligiblePlayerIds: [],
+        quorumDeadlineAt: null,
+        endedEarly: false,
+        rematchPlayerIds: [],
+        rematchDeadlineAt: null,
+      };
+      this.state.onlineReservations = {};
+      this.state.onlineReplays = {};
+      this.state.maxPlayers = 6;
+    }
+    const reservations = this.state.onlineReservations!;
+    const prior = reservations[clientId];
+    if (prior) {
+      if (prior.token !== token || this.state.phase === "expired") return false;
+      if (this.state.playerIdByClientId[clientId]) return true;
+      if (this.state.phase !== "lobby") return false;
+      prior.expiresAt = nowMs() + 30000;
+      await this.save();
+      return true;
+    }
+    if (this.state.phase !== "lobby" || this.state.rosterLocked) return false;
+    for (const [client, lease] of Object.entries(reservations)) {
+      if (lease.expiresAt < nowMs() && !this.state.playerIdByClientId[client]) delete reservations[client];
+    }
+    if (Object.keys(reservations).length >= 6) return false;
+    reservations[clientId] = { token, expiresAt: nowMs() + 30_000 };
+    this.touch();
+    await this.save();
+    return true;
+  }
+
+  async releaseOnline(clientId: string, token: string) {
+    if (!this.state.online || this.state.onlineReservations?.[clientId]?.token !== token) return;
+    delete this.state.onlineReservations[clientId];
+    const playerId = this.state.playerIdByClientId[clientId];
+    if (playerId) {
+      const player = this.state.playersById[playerId];
+      if (player) player.connected = false;
+      if (this.isActive() && activePlayers(this.state).length < minimumPlayersForMode(this.state.mode))
+        this.state.online.quorumDeadlineAt ??= nowMs() + 30000;
+      delete this.state.playerTokens[playerId];
+      this.state.online.readyPlayerIds = this.state.online.readyPlayerIds.filter((id) => id !== playerId);
+      if (this.state.phase === "lobby") {
+        delete this.state.playersById[playerId];
+        delete this.state.playerIdByClientId[clientId];
+      }
+      for (const socket of this.room.connections()) {
+        if (socket.state?.role === "player" && socket.state.playerId === playerId) {
+          socket.setState({ role: "spectator", clientId });
+          socket.send(JSON.stringify({ type: "player_left" } satisfies ServerMessage));
+        }
+      }
+    }
+    this.updateOnlineLobby();
+    if (this.state.phase === "mode_select" && activePlayers(this.state).length < 2)
+      this.state.nextAdvanceAt = nowMs();
+    this.touch(false);
+    await this.persistAndBroadcast();
+  }
+
+  private updateOnlineLobby() {
+    const online = this.state.online!;
+    if (this.state.phase !== "lobby") return;
+    const players = activePlayers(this.state);
+    online.readyPlayerIds = online.readyPlayerIds.filter((id) => players.some((p) => p.id === id));
+    if (players.length < 2) {
+      online.readyDeadlineAt = null;
+      return;
+    }
+    online.readyDeadlineAt ??= nowMs() + 15000;
+    if (!players.every((p) => online.readyPlayerIds.includes(p.id))) return;
+    this.state.phase = "mode_select";
+    this.state.mode = null;
+    this.state.rosterLocked = true;
+    online.readyDeadlineAt = null;
+    online.modeVoteDeadlineAt = nowMs() + (this.isTest() ? 3000 : 15000);
+    this.state.initialVote = { votes: {}, decision: null };
+    this.resolveOnlineMode();
+  }
+
+  private resolveOnlineMode() {
+    const online = this.state.online!;
+    const vote = this.state.initialVote;
+    if (this.state.phase !== "mode_select" || !vote) return;
+    const players = activePlayers(this.state);
+    if (players.length < 2) {
+      this.state.nextAdvanceAt = nowMs();
+      return;
+    }
+    if (vote.decision) {
+      if (players.length < minimumPlayersForMode(vote.decision.mode)) {
+        vote.decision = { mode: "quiz", random: false, startsAt: nowMs() + (this.isTest() ? 300 : 1000) };
+        this.state.nextAdvanceAt = vote.decision.startsAt;
+      }
+      return;
+    }
+    const votes = players.map((p) => vote.votes[p.id]);
+    const quiz = votes.filter((v) => v === "quiz").length;
+    const freestyle = players.length >= 3 ? votes.filter((v) => v === "freestyle").length : 0;
+    const expired = online.modeVoteDeadlineAt !== null && online.modeVoteDeadlineAt <= nowMs();
+    if (
+      players.length > 2 &&
+      !expired &&
+      Math.max(quiz, freestyle) <= players.length / 2 &&
+      quiz + freestyle < players.length
+    )
+      return;
+    const tied = players.length >= 3 && quiz === freestyle && quiz > 0;
+    const mode =
+      players.length < 3 || quiz + freestyle === 0
+        ? "quiz"
+        : tied
+          ? crypto.getRandomValues(new Uint8Array(1))[0]! % 2
+            ? "quiz"
+            : "freestyle"
+          : quiz > freestyle
+            ? "quiz"
+            : "freestyle";
+    vote.decision = { mode, random: tied, startsAt: nowMs() + (this.isTest() ? 300 : 1000) };
+    this.state.nextAdvanceAt = vote.decision.startsAt;
+    online.modeVoteDeadlineAt = null;
+  }
+
+  private async handleOnlineAction(
+    message: ClientMessage,
+    playerId: PlayerId,
+    connection: RoomConnection,
+  ): Promise<boolean> {
+    const online = this.state.online!;
+    if (message.type === "player_leave") {
+      const player = this.state.playersById[playerId]!;
+      await this.releaseOnline(
+        player.clientId,
+        this.state.onlineReservations?.[player.clientId]?.token ?? "",
+      );
+      return true;
+    }
+    if (message.type === "player_ready") {
+      if (this.state.phase !== "lobby") return true;
+      if (!online.readyPlayerIds.includes(playerId)) online.readyPlayerIds.push(playerId);
+      this.updateOnlineLobby();
+    } else if (message.type === "player_rematch") {
+      if (this.state.phase !== "finished") return true;
+      if (!online.rematchPlayerIds.includes(playerId)) online.rematchPlayerIds.push(playerId);
+      online.rematchDeadlineAt ??= nowMs() + (this.isTest() ? 3000 : 15000);
+      await this.maybeOnlineRematch();
+    } else if (message.type === "player_media_ready") {
+      if (this.state.phase !== "transition" || message.turnId !== this.state.turnId) return true;
+      if (!online.mediaReadyPlayerIds.includes(playerId)) online.mediaReadyPlayerIds.push(playerId);
+      await this.advanceOnlineDue();
+    } else if (message.type === "player_media_failed") {
+      if (message.turnId !== this.state.turnId) return true;
+      online.mediaReadyPlayerIds = online.mediaReadyPlayerIds.filter((id) => id !== playerId);
+      online.eligiblePlayerIds = online.eligiblePlayerIds.filter((id) => id !== playerId);
+    } else if (message.type === "player_replay") {
+      const eligible =
+        online.eligiblePlayerIds.includes(playerId) &&
+        (this.state.phase === "quiz_answering"
+          ? !this.state.quiz?.answers[playerId]
+          : this.state.phase === "freestyle_submitting" && !this.state.freestyle?.submissions[playerId]);
+      if (
+        message.turnId !== this.state.turnId ||
+        !eligible ||
+        (this.state.onlineReplays?.[playerId]?.endsAt ?? 0) > nowMs()
+      )
+        return true;
+      const round = currentRound(this.state);
+      if (!round) return true;
+      const duration = Math.max(0.1, round.end - round.start - 0.12) * 1000;
+      (this.state.onlineReplays ??= {})[playerId] = {
+        id: id("personal"),
+        startedAt: nowMs(),
+        endsAt: nowMs() + duration,
+      };
+    } else {
+      if (
+        ["player_quiz_answer", "player_freestyle_submit", "player_vote"].includes(message.type) &&
+        !online.eligiblePlayerIds.includes(playerId)
+      ) {
+        this.sendError(connection, "bad_phase", "Этот раунд пропущен: фрагмент не загрузился.");
+        return true;
+      }
+      if (message.type === "player_vote") {
+        const target = Object.entries(this.state.onlineSubmissionIds ?? {}).find(
+          ([, alias]) => alias === message.submissionId,
+        )?.[0];
+        if (!target) {
+          this.sendError(connection, "unknown_submission", "Такого ответа нет.");
+          return true;
+        }
+        message.submissionId = target;
+      }
+      return false;
+    }
+    this.touch();
+    await this.persistAndBroadcast();
+    return true;
+  }
+
+  private async maybeOnlineRematch() {
+    const online = this.state.online!;
+    const players = activePlayers(this.state);
+    const selected = players.filter((p) => online.rematchPlayerIds.includes(p.id));
+    const expired = online.rematchDeadlineAt !== null && online.rematchDeadlineAt <= nowMs();
+    if (!expired && (selected.length < 2 || selected.length !== players.length)) return;
+    if (expired && selected.length < 2) {
+      online.rematchDeadlineAt = null;
+      online.rematchPlayerIds = [];
+      for (const player of orderedPlayers(this.state))
+        await this.releaseOnline(
+          player.clientId,
+          this.state.onlineReservations?.[player.clientId]?.token ?? "",
+        );
+      return;
+    }
+    for (const player of orderedPlayers(this.state)) {
+      if (selected.some((p) => p.id === player.id)) continue;
+      await this.releaseOnline(
+        player.clientId,
+        this.state.onlineReservations?.[player.clientId]?.token ?? "",
+      );
+      delete this.state.playersById[player.id];
+      delete this.state.playerIdByClientId[player.clientId];
+    }
+    online.rematchDeadlineAt = null;
+    online.rematchPlayerIds = [];
+    this.state.phase = "lobby";
+    this.state.mode = null;
+    this.state.rosterLocked = false;
+    this.state.finalVote = null;
+    this.state.initialVote = null;
+    this.state.roundResult = null;
+    this.state.totalRounds = 0;
+    this.state.currentRoundId = null;
+    online.readyPlayerIds = selected.map((p) => p.id);
+    this.updateOnlineLobby();
+  }
+
+  private nextOnlineAlarmAt(): number {
+    const online = this.state.online!;
+    const times = [
+      this.state.expiresAt,
+      online.readyDeadlineAt,
+      online.modeVoteDeadlineAt,
+      online.mediaLoadDeadlineAt,
+      online.quorumDeadlineAt,
+      online.rematchDeadlineAt,
+      this.state.transitionUntil !== null && this.state.transitionUntil > nowMs()
+        ? this.state.transitionUntil
+        : null,
+      this.state.deadlineAt,
+      this.state.nextAdvanceAt,
+      ...activePlayers(this.state).map((p) => p.lastSeenAt + 30000),
+    ].filter((t): t is number => t !== null);
+    return Math.max(nowMs() + 1, Math.min(...times));
+  }
+
+  private async advanceOnlineDue() {
+    const online = this.state.online!;
+    if (this.state.phase === "expired") return;
+    let changed = false;
+    for (const player of activePlayers(this.state)) {
+      if (player.lastSeenAt + 30000 <= nowMs()) {
+        player.connected = false;
+        changed = true;
+      }
+    }
+    if (nowMs() >= this.state.expiresAt) {
+      this.state.phase = "expired";
+      this.state.onlineReservations = {};
+      this.state.playerTokens = {};
+      this.state.deadlineAt = this.state.transitionUntil = this.state.nextAdvanceAt = null;
+      online.readyDeadlineAt =
+        online.modeVoteDeadlineAt =
+        online.mediaLoadDeadlineAt =
+        online.quorumDeadlineAt =
+        online.rematchDeadlineAt =
+          null;
+      await this.persistAndBroadcast();
+      return;
+    }
+    if (this.isActive()) {
+      if (activePlayers(this.state).length < minimumPlayersForMode(this.state.mode))
+        online.quorumDeadlineAt ??= nowMs() + 30000;
+      else online.quorumDeadlineAt = null;
+      if (online.quorumDeadlineAt !== null && online.quorumDeadlineAt <= nowMs()) {
+        online.endedEarly = true;
+        online.quorumDeadlineAt = null;
+        online.mediaLoadDeadlineAt = null;
+        await this.finishGame();
+        return;
+      }
+    } else online.quorumDeadlineAt = null;
+    if (this.state.phase === "lobby") {
+      for (const player of orderedPlayers(this.state)) {
+        if (!player.connected && player.lastSeenAt + 30000 <= nowMs())
+          await this.releaseOnline(
+            player.clientId,
+            this.state.onlineReservations?.[player.clientId]?.token ?? "",
+          );
+      }
+      if (online.readyDeadlineAt !== null && online.readyDeadlineAt <= nowMs()) {
+        const ready = activePlayers(this.state).filter((p) => online.readyPlayerIds.includes(p.id));
+        const keep = ready.length >= 2 ? new Set(ready.map((p) => p.id)) : new Set<string>();
+        for (const player of orderedPlayers(this.state)) {
+          if (!keep.has(player.id))
+            await this.releaseOnline(
+              player.clientId,
+              this.state.onlineReservations?.[player.clientId]?.token ?? "",
+            );
+        }
+        online.readyDeadlineAt = null;
+      }
+      this.updateOnlineLobby();
+      changed = true;
+    }
+    if (this.state.phase === "mode_select") {
+      if (activePlayers(this.state).length < 2) {
+        this.state.phase = "lobby";
+        for (const player of orderedPlayers(this.state))
+          await this.releaseOnline(
+            player.clientId,
+            this.state.onlineReservations?.[player.clientId]?.token ?? "",
+          );
+        this.state.rosterLocked = false;
+        this.state.initialVote = null;
+        this.state.nextAdvanceAt = null;
+        online.modeVoteDeadlineAt = null;
+        await this.persistAndBroadcast();
+        return;
+      }
+      this.resolveOnlineMode();
+      if (this.state.initialVote?.decision && this.state.nextAdvanceAt! <= nowMs()) {
+        this.state.mode = this.state.initialVote.decision.mode;
+        this.state.nextAdvanceAt = null;
+        await this.startGame(true);
+        return;
+      }
+      changed = true;
+    }
+    if (this.state.phase === "finished" && online.rematchDeadlineAt !== null) {
+      await this.maybeOnlineRematch();
+      changed = true;
+    }
+    if (this.state.phase === "transition") {
+      const players = activePlayers(this.state);
+      const loaded = players.filter((p) => online.mediaReadyPlayerIds.includes(p.id));
+      const expired = online.mediaLoadDeadlineAt !== null && online.mediaLoadDeadlineAt <= nowMs();
+      if (
+        (expired || (loaded.length === players.length && loaded.length > 0)) &&
+        this.state.transitionUntil! <= nowMs()
+      ) {
+        online.eligiblePlayerIds = loaded.map((p) => p.id);
+        online.mediaLoadDeadlineAt = null;
+        this.state.transitionUntil = null;
+        if (!loaded.length) {
+          online.endedEarly = true;
+          await this.finishGame();
+          return;
+        }
+        this.state.phase = "playing";
+        this.state.playingStartedAt = nowMs() + (this.isTest() ? 100 : 1000);
+        const round = currentRound(this.state)!;
+        this.state.nextAdvanceAt =
+          this.state.playingStartedAt +
+          (this.isTest() ? 250 : Math.max(0.1, round.end - round.start - 0.12) * 1000);
+        changed = true;
+      }
+    } else if (this.state.phase === "playing" && this.state.nextAdvanceAt! <= nowMs()) {
+      await this.enterAnswerPhase();
+      return;
+    } else if (this.state.phase === "round_results" && this.state.nextAdvanceAt! <= nowMs()) {
+      await this.advanceAfterResults();
+      return;
+    } else if (this.state.deadlineAt !== null && this.state.deadlineAt <= nowMs()) {
+      await this.onDeadline();
+      return;
+    }
+    if (changed) {
+      this.touch(false);
+      await this.persistAndBroadcast();
+    }
   }
 
   private async handleHostAction(message: ClientMessage, connection: RoomConnection) {
@@ -559,6 +987,7 @@ export class QuizRoom {
       return;
     }
     player.lastSeenAt = nowMs();
+    if (this.state.online && (await this.handleOnlineAction(message, playerId, connection))) return;
     if (message.type === "player_final_vote" || message.type === "player_mode_vote") {
       const initial = message.type === "player_mode_vote";
       const vote = initial ? this.state.initialVote : this.state.finalVote;
@@ -604,7 +1033,11 @@ export class QuizRoom {
           socket.setState({ role: "spectator", clientId: socket.state.clientId });
           socket.send(JSON.stringify({ type: "player_left" } satisfies ServerMessage));
         }
-      if (this.isActive() && activePlayers(this.state).length < minimumPlayersForMode(this.state.mode)) {
+      if (
+        !this.state.online &&
+        this.isActive() &&
+        activePlayers(this.state).length < minimumPlayersForMode(this.state.mode)
+      ) {
         await this.finishGame();
         return;
       }
@@ -776,12 +1209,17 @@ export class QuizRoom {
     this.state.rosterLocked = true;
     const community = (await this.room.publishedRounds?.()) ?? [];
     const pool = [...seedRounds, ...community];
-    const order =
-      this.isTest() && !this.state.code.startsWith("E2EF")
+    let order =
+      this.isTest() && !this.state.online && !this.state.code.startsWith("E2EF")
         ? (this.state.mode === "quiz" ? [1, 2, 3] : [1, 3, 4]).map(
             (id) => pool.find((round) => round.id === id)!,
           )
         : buildMultiplayerRoundOrder(this.state.mode, pool);
+    if (this.state.online) {
+      order = order.slice(0, 5);
+      this.state.online.endedEarly = false;
+      this.state.online.quorumDeadlineAt = null;
+    }
     this.state.roundSnapshots = structuredClone(order);
     this.state.roundOrderIds = order.map((round) => round.id);
     this.state.quizPayloads = {};
@@ -801,6 +1239,13 @@ export class QuizRoom {
 
   private async enterTransition() {
     this.state.replay = null;
+    if (this.state.online) {
+      this.state.online.mediaReadyPlayerIds = [];
+      this.state.online.eligiblePlayerIds = [];
+      this.state.online.mediaLoadDeadlineAt = nowMs() + (this.isTest() ? 3000 : 15000);
+      this.state.onlineReplays = {};
+      this.state.onlineSubmissionIds = {};
+    }
     const roundId = this.state.roundOrderIds[this.state.currentRoundIndex] ?? null;
     const round = this.state.roundSnapshots.find((item) => item.id === roundId) ?? roundById(roundId);
     if (!round) {
@@ -1013,6 +1458,10 @@ export class QuizRoom {
   }
 
   private resolveFinalVotes() {
+    if (this.state.online) {
+      this.resolveOnlineMode();
+      return;
+    }
     const initial = this.state.phase === "mode_select";
     const vote = initial ? this.state.initialVote : this.state.finalVote;
     if ((!initial && this.state.phase !== "finished") || !vote) return;
@@ -1078,6 +1527,7 @@ export class QuizRoom {
   }
 
   private nextAlarmAt(): number {
+    if (this.state.online) return this.nextOnlineAlarmAt();
     const due =
       this.state.pausedAt || !this.isActive()
         ? this.state.expiresAt
@@ -1104,6 +1554,10 @@ export class QuizRoom {
   }
 
   private async advanceDue() {
+    if (this.state.online) {
+      await this.advanceOnlineDue();
+      return;
+    }
     if (this.state.phase === "expired") return;
     if (
       this.state.hostConnected &&
@@ -1208,7 +1662,9 @@ export class QuizRoom {
 
   private allConnectedPlayersDone(donePlayerIds: PlayerId[]): boolean {
     const done = new Set(donePlayerIds);
-    const participants = orderedPlayers(this.state);
+    const participants = this.state.online
+      ? activePlayers(this.state).filter((p) => this.state.online!.eligiblePlayerIds.includes(p.id))
+      : orderedPlayers(this.state);
     return participants.length > 0 && participants.every((player) => done.has(player.id));
   }
 
@@ -1216,8 +1672,11 @@ export class QuizRoom {
     const freestyle = this.state.freestyle;
     if (!freestyle) return false;
     const submissions = new Set(Object.keys(freestyle.submissions));
-    const eligible = orderedPlayers(this.state).filter((player) =>
-      [...submissions].some((submissionId) => submissionId !== player.id),
+    const eligible = orderedPlayers(this.state).filter(
+      (player) =>
+        (!this.state.online ||
+          (player.connected && this.state.online.eligiblePlayerIds.includes(player.id))) &&
+        [...submissions].some((submissionId) => submissionId !== player.id),
     );
     return eligible.length === 0 || eligible.every((player) => !!freestyle.votes[player.id]);
   }
@@ -1227,15 +1686,19 @@ export class QuizRoom {
     if (!freestyle) return;
     freestyle.submittedPlayerIds = Object.keys(freestyle.submissions);
     freestyle.votedPlayerIds = Object.keys(freestyle.votes);
+    if (this.state.online && ["freestyle_voting", "round_results", "finished"].includes(this.state.phase)) {
+      const aliases = (this.state.onlineSubmissionIds ??= {});
+      for (const playerId of Object.keys(freestyle.submissions)) aliases[playerId] ??= id("submission");
+    }
     freestyle.votingOptions =
       this.state.phase === "freestyle_voting" ||
       this.state.phase === "round_results" ||
       this.state.phase === "finished"
         ? Object.entries(freestyle.submissions)
             .map(([submissionId, submission]) => ({
-              submissionId,
+              submissionId: this.state.online ? this.state.onlineSubmissionIds![submissionId]! : submissionId,
               text: submission.text,
-              submittedAt: submission.submittedAt,
+              submittedAt: this.state.online ? 0 : submission.submittedAt,
             }))
             .sort((a, b) => a.submittedAt - b.submittedAt || a.submissionId.localeCompare(b.submissionId))
         : [];
@@ -1255,6 +1718,7 @@ export class QuizRoom {
     const showCorrect = this.state.phase === "round_results" || this.state.phase === "finished";
     return {
       code: this.state.code,
+      online: this.state.online,
       phase: this.state.phase,
       mode: this.state.mode,
       minPlayers: this.state.minPlayers,
@@ -1326,7 +1790,7 @@ export class QuizRoom {
     if (meta.role === "host") {
       if (connection.id !== this.state.activeHostConnectionId) return;
       this.state.hostConnected = false;
-      if (this.isActive() && !this.state.pausedAt) this.state.pausedAt = nowMs();
+      if (!this.state.online && this.isActive() && !this.state.pausedAt) this.state.pausedAt = nowMs();
       this.state.expiresAt = nowMs() + 30 * 60_000;
     }
     if (meta.role === "player") {
@@ -1335,6 +1799,12 @@ export class QuizRoom {
       if (player) {
         player.connected = false;
         player.lastSeenAt = nowMs();
+        if (
+          this.state.online &&
+          this.isActive() &&
+          activePlayers(this.state).length < minimumPlayersForMode(this.state.mode)
+        )
+          this.state.online.quorumDeadlineAt ??= nowMs() + 30000;
       }
     }
     if (
@@ -1394,7 +1864,12 @@ export class QuizRoom {
             ? {
                 quizAnswer: this.state.quiz?.answers[meta.playerId] ?? null,
                 submission: this.state.freestyle?.submissions[meta.playerId]?.text ?? null,
-                votedSubmissionId: this.state.freestyle?.votes[meta.playerId] ?? null,
+                submissionId: this.state.onlineSubmissionIds?.[meta.playerId],
+                votedSubmissionId: this.state.online
+                  ? (this.state.onlineSubmissionIds?.[this.state.freestyle?.votes[meta.playerId] ?? ""] ??
+                    null)
+                  : (this.state.freestyle?.votes[meta.playerId] ?? null),
+                personalReplay: this.state.onlineReplays?.[meta.playerId] ?? null,
               }
             : undefined,
       },
