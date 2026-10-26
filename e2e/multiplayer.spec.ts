@@ -380,6 +380,12 @@ test("centered desktop host and touch replay preserve the singleplayer controls"
   await expect(replay).toHaveClass(/dock-btn-replay/);
   const content = await host.locator(".quiz-content-fit-inner").boundingBox();
   expect(Math.abs(content!.x + content!.width / 2 - 720)).toBeLessThan(2);
+  await host.setViewportSize({ width: 1200, height: 900 });
+  const header = await host.locator(".quiz-header").boundingBox();
+  const standings = await host.locator(".multiplayer-host-leaderboard").boundingBox();
+  expect(header!.x).toBeGreaterThan(standings!.x + standings!.width);
+  const compactContent = await host.locator(".quiz-content-fit-inner").boundingBox();
+  expect(Math.abs(compactContent!.x + compactContent!.width / 2 - 600)).toBeLessThan(2);
   await replay.click();
   await expect(alice.getByRole("button", { name: /Готовим повтор|Повтор ·/ })).toBeDisabled();
   expect(await alice.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
