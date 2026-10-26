@@ -392,7 +392,8 @@ test("centered desktop host and touch replay preserve the singleplayer controls"
 });
 
 test("responsive simulation initializes all independent clients", async ({ page }) => {
-  await page.goto("/simulate?fast=1");
+  // Lobby initialization uses the regular backend; fast simulation needs a separate port 2001.
+  await page.goto("/simulate");
   await expect(page.locator("iframe")).toHaveCount(4);
   for (const title of ["Игрок 1 · Аня", "Игрок 2 · Борис", "Игрок 3 · Вика"])
     await expect(
