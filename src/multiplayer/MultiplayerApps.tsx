@@ -1,4 +1,6 @@
 import { ReplayWithPlayIcon } from "../components/ReplayWithPlayIcon";
+import { motion, useReducedMotion } from "framer-motion";
+import { FreestylePoints } from "./FreestylePoints";
 import { AdmissionPanel } from "./admission";
 import { forgetRoom } from "../navigation";
 import { RoomMenu } from "./RoomMenu";
@@ -186,7 +188,10 @@ function PlayerRoundInformation({
     ? state.freestyle?.votingOptions.find((option) => option.submissionId === own.votedSubmissionId)?.text
     : null;
   return (
-    <section className="multiplayer-personal-round">
+    <section
+      className="multiplayer-personal-round multiplayer-stage-enter"
+      key={`${state.turnId}:${state.phase}`}
+    >
       {round ? <h2>{round.title}</h2> : null}
       {round && (ownLabel || myQuiz || myFreestyle) ? (
         <div className="multiplayer-hint-bars">
@@ -228,6 +233,9 @@ function PlayerRoundInformation({
                 ? `Голосов: ${myFreestyle.votes} · +${Number(myFreestyle.tieBrokenWinner) + Number(myFreestyle.similarityBonus)} очк.`
                 : "Нет ответа · +0 очков"}
           </p>
+          {myFreestyle && result.kind === "freestyle" ? (
+            <FreestylePoints submission={myFreestyle} threshold={result.similarityThreshold ?? 0.5} />
+          ) : null}
         </>
       ) : null}
     </section>
@@ -318,6 +326,7 @@ function Leaderboard({
   finale?: boolean;
   state?: PublicRoomState;
 }) {
+  const reduced = useReducedMotion();
   return (
     <section
       className={`multiplayer-leaderboard ${finale ? "multiplayer-leaderboard--finale" : ""}`}
@@ -326,11 +335,20 @@ function Leaderboard({
       <h2>{title}</h2>
       <ol>
         {rows.map((row) => (
-          <li key={row.playerId} className={!row.connected ? "is-disconnected" : ""}>
+          <motion.li
+            layout={reduced ? false : "position"}
+            transition={{ duration: reduced ? 0 : 0.32, ease: "easeOut" }}
+            key={row.playerId}
+            className={!row.connected ? "is-disconnected" : ""}
+          >
             <span className="multiplayer-leaderboard-name">
               {row.rank}. {row.name}
             </span>
-            <strong>{row.score} очк.</strong>
+            <strong>
+              <span key={row.score} className="multiplayer-score-pop">
+                {row.score} очк.
+              </span>
+            </strong>
             {state ? (
               <small className="multiplayer-player-status">{playerStatus(state, row.playerId)}</small>
             ) : null}
@@ -342,7 +360,7 @@ function Leaderboard({
                 }
               </small>
             ) : null}
-          </li>
+          </motion.li>
         ))}
       </ol>
     </section>
@@ -495,11 +513,12 @@ function HostDock({ state }: { state: PublicRoomState }) {
 }
 
 function FreestyleResultStage({ state }: { state: PublicRoomState }) {
-  const result = state.roundResult?.kind === "freestyle" ? state.roundResult : null;
+  const result =
+    state.phase === "round_results" && state.roundResult?.kind === "freestyle" ? state.roundResult : null;
   if (!result) return null;
   return (
     <>
-      <div className="multiplayer-result-section">
+      <div className="multiplayer-result-section multiplayer-stage-enter" key={`${state.turnId}:original`}>
         <p className="multiplayer-eyebrow">Оригинальный бар</p>
         <p className="lyric-line genius-bar genius-reveal-line multiplayer-answer-bar">
           {result.originalAnswer}
@@ -511,16 +530,16 @@ function FreestyleResultStage({ state }: { state: PublicRoomState }) {
           {result.submissions.map((submission) => (
             <article
               key={submission.playerId}
-              className={`lyric-line genius-bar multiplayer-submission-card ${
+              className={`lyric-line genius-bar multiplayer-submission-card multiplayer-result-enter ${
                 submission.tieBrokenWinner ? "is-winner" : ""
               }`}
             >
               <span>{submission.text}</span>
               <small>
                 {submission.name} · голосов {submission.votes}
-                {submission.votingWinner ? " · победитель голосования" : ""}
-                {submission.similarityBonus ? " · +1 похожесть" : ""}
+                {submission.tieBrokenWinner ? " · победитель голосования" : ""}
               </small>
+              <FreestylePoints submission={submission} threshold={result.similarityThreshold ?? 0.5} />
             </article>
           ))}
         </div>
@@ -533,7 +552,11 @@ function FreestyleResultStage({ state }: { state: PublicRoomState }) {
 function ResultOverlay({ state }: { state: PublicRoomState }) {
   if (!state.roundResult || state.phase !== "round_results") return null;
   return (
-    <section className="multiplayer-round-summary" aria-live="polite">
+    <section
+      className="multiplayer-round-summary multiplayer-stage-enter"
+      key={state.turnId}
+      aria-live="polite"
+    >
       <header className="multiplayer-result-header">
         {state.roundResult.kind === "quiz" ? (
           <p className="multiplayer-muted">Верно: {state.roundResult.correctPlayerIds.length}</p>
@@ -1083,7 +1106,9 @@ function PlayerWaiting({
           <div ref={containerRef} className="quiz-content-fit-outer">
             <div ref={innerRef} className="quiz-content-fit-inner">
               <div className="multiplayer-waiting-content">
-                <h1 className="quiz-title">{title}</h1>
+                <h1 key={`${state.turnId}:${title}`} className="quiz-title multiplayer-stage-enter">
+                  {title}
+                </h1>
                 {(state.phase === "playing" || state.replay) && listeningRound ? (
                   <LyricsPanel
                     hintLines={pickLyricLines(listeningRound.lyrics, listeningRound.hintLineIds)}
@@ -1184,7 +1209,10 @@ function PlayerQuizController({
         onNextRound={() => {}}
         controlsSlot={
           <div className="dock-host">
-            <p className="dock-pause-hint">
+            <p
+              key={accepted ? "accepted" : "choosing"}
+              className={`dock-pause-hint ${accepted ? "multiplayer-answer-accepted" : ""}`}
+            >
               {accepted
                 ? "Ответ принят"
                 : state.quiz.variant === "order"
@@ -1320,7 +1348,10 @@ function PlayerVote({
           <h1 className="quiz-title">Голосование</h1>
           <RoundProgress state={state} />
           <p className="multiplayer-muted">Один голос. За свой бар голосовать нельзя.</p>
-          <div className="multiplayer-answer-grid quiz-options-grid">
+          <div
+            className="multiplayer-answer-grid quiz-options-grid multiplayer-stage-enter"
+            key={state.turnId}
+          >
             {options.map((option) => (
               <button
                 key={option.submissionId}

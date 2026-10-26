@@ -10,6 +10,7 @@ import {
 } from "../src/multiplayer/scoring";
 import {
   compareAnswerSimilarity,
+  FREESTYLE_SIMILARITY_THRESHOLD,
   isSimilarityBonus,
   normalizeAnswerText,
 } from "../src/multiplayer/similarity";
@@ -39,8 +40,21 @@ describe("multiplayer text similarity", () => {
 
   it("scores unrelated answers below the bonus threshold", () => {
     expect(compareAnswerSimilarity("совсем другой ответ", "я люблю кататься на велике").score).toBeLessThan(
-      0.5,
+      FREESTYLE_SIMILARITY_THRESHOLD,
     );
+  });
+
+  it("ignores punctuation and awards partial matches between 40 and 50 percent", () => {
+    expect(compareAnswerSimilarity("Откуда, в жопе... бриллианты?!", "откуда в жопе бриллианты").score).toBe(
+      1,
+    );
+    const answer = "бриллианты";
+    const original = "откуда в жопе бриллианты";
+    expect(FREESTYLE_SIMILARITY_THRESHOLD).toBe(0.4);
+    expect(compareAnswerSimilarity(answer, original).score).toBeGreaterThanOrEqual(0.4);
+    expect(compareAnswerSimilarity(answer, original).score).toBeLessThan(0.5);
+    expect(isSimilarityBonus(answer, original)).toBe(true);
+    expect(isSimilarityBonus("в жопе камни", original)).toBe(false);
   });
 });
 

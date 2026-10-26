@@ -617,6 +617,82 @@ it("awards the exact freestyle match bonus using private lyrics after public red
   expect(f.game.state.playersById[ids[0]!]!.score).toBe(2);
 });
 
+describe("freestyle vote and similarity awards", () => {
+  it("awards a 40–50% match independently and awards no voting points when nobody votes", async () => {
+    const f = await fixture();
+    await f.start("freestyle");
+    const ids = f.players.map((p) => (p.state?.role === "player" ? p.state.playerId : ""));
+    for (let n = 0; n < 3; n++)
+      await f.send(f.players[n]!, {
+        type: "player_freestyle_submit",
+        turnId: f.game.state.turnId,
+        text: n === 0 ? "бриллианты!!!" : "zzzz qqqq xxxx",
+      });
+    expect(f.game.state.phase).toBe("freestyle_voting");
+    for (const socket of [f.host, ...f.players]) {
+      expect(socket.last.type).toBe("snapshot");
+      if (socket.last.type === "snapshot") {
+        expect(socket.last.state.roundResult).toBeNull();
+        const round = socket.last.state.round!;
+        expect(round.lyrics.every((line) => round.hintLineIds.includes(line.id))).toBe(true);
+      }
+    }
+    await f.due();
+    const result = f.game.state.roundResult;
+    expect(result).toMatchObject({ kind: "freestyle", similarityThreshold: 0.4, winnerPlayerIds: [] });
+    if (result?.kind !== "freestyle") throw new Error("Missing result");
+    const mine = result.submissions.find((item) => item.playerId === ids[0])!;
+    expect(mine).toMatchObject({
+      similarityBonus: true,
+      tieBrokenWinner: false,
+      votingWinner: false,
+    });
+    expect(mine.similarity).toBeGreaterThanOrEqual(0.4);
+    expect(mine.similarity).toBeLessThan(0.5);
+    expect(f.game.state.playersById[ids[0]!]!.score).toBe(1);
+    expect(f.game.state.playersById[ids[1]!]!.score).toBe(0);
+    expect(f.game.state.playersById[ids[2]!]!.score).toBe(0);
+  });
+
+  it.each([0, 0xffffffff])(
+    "uses the lottery for positive ties and persists its single award (%i)",
+    async (random) => {
+      const f = await fixture();
+      await f.start("freestyle");
+      const ids = f.players.map((p) => (p.state?.role === "player" ? p.state.playerId : ""));
+      for (const player of f.players)
+        await f.send(player, {
+          type: "player_freestyle_submit",
+          turnId: f.game.state.turnId,
+          text: "zzzz qqqq xxxx",
+        });
+      const sorted = Object.keys(f.game.state.freestyle!.submissions).sort((a, b) => a.localeCompare(b));
+      const rng = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+        if (array instanceof Uint32Array) array.fill(random);
+        return array;
+      });
+      for (let n = 0; n < 3; n++)
+        await f.send(f.players[n]!, {
+          type: "player_vote",
+          turnId: f.game.state.turnId,
+          submissionId: ids[(n + 1) % 3],
+        });
+      expect(rng).toHaveBeenCalled();
+      const result = structuredClone(f.game.state.roundResult);
+      expect(result).toMatchObject({ kind: "freestyle", winnerPlayerIds: [sorted[random ? 2 : 0]] });
+      if (result?.kind !== "freestyle") throw new Error("Missing result");
+      expect(result.tieBreakNote).toContain("жеребьёвка");
+      expect(result.submissions.filter((s) => s.votingWinner)).toHaveLength(1);
+      expect(Object.values(f.game.state.playersById).reduce((sum, p) => sum + p.score, 0)).toBe(1);
+      rng.mockRestore();
+      await f.restart();
+      await f.game.onAlarm();
+      expect(f.game.state.roundResult).toEqual(result);
+      expect(Object.values(f.game.state.playersById).reduce((sum, p) => sum + p.score, 0)).toBe(1);
+    },
+  );
+});
+
 describe("manual pause and shared replay", () => {
   beforeEach(() => {
     vi.useFakeTimers();
