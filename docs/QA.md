@@ -5,7 +5,7 @@ Use Node24 (`.nvmrc`); minimum22.14. Run `npm ci` after dependency changes.
 - Quick: `npm run verify:quick` selects deterministic checks from working changes. Add `-- --base origin/main` to include committed branch changes, or `-- --plan` to inspect selection.
 - Multiplayer: `npm run verify:multiplayer` runs unit, browser and Worker checks.
 - Release: `npm run verify:release` runs full formatting, lint, unit, build, Worker dry-run, browser and local load checks. It never deploys.
-- Add `-- --fresh` after browser/runtime/environment changes. Successful checks are cached only for the same repository/runtime fingerprint. Logs and receipts live in ignored `.cache/qa/`.
+- Add `-- --fresh` after browser/runtime/environment changes. Successful checks are cached only for the same repository/runtime fingerprint. Logs and receipts live in ignored `.cache/qa/`. Lint prints counts and actionable errors; all warnings remain in `.cache/qa/eslint-details.json`.
 
 Start an isolated accelerated local backend with `npm run party:test`. The load runner defaults to `ws://localhost:1999`; override `MULTIPLAYER_LOAD_URL` only with a loopback test server. It exercises ten rooms, one hundred players and fifty reconnects. Fast fixture codes require TEST_MODE and an E2E prefix; ordinary party:dev and production retain normal timing. Never stress production or delete the user's development state to reset tests.
 

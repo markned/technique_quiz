@@ -45,7 +45,14 @@ function connect(code, hello) {
       reject(failure);
     });
     socket.addEventListener("message", (event) => {
-      const message = JSON.parse(String(event.data));
+      let message;
+      try {
+        message = JSON.parse(String(event.data));
+      } catch {
+        failure = new Error(`${code}: invalid JSON from server`);
+        reject(failure);
+        return;
+      }
       if (message.type === "error") {
         // Replacing a connection deliberately retires the old socket.
         if (message.code === "session_replaced") {

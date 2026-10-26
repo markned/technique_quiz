@@ -14,5 +14,13 @@ for (const folder of readdirSync(root)) {
     throw new Error(`Invalid skill ${path}`);
   count++;
 }
-if (count !== 5) throw new Error(`Expected five skills, got ${count}`);
+for (const required of [
+  "multiplayer-qa",
+  "game-code-review",
+  "code-change-verification",
+  "systematic-debugging",
+  "docs-sync",
+]) {
+  if (!existsSync(`${root}/${required}/SKILL.md`)) throw new Error(`Missing required skill ${required}`);
+}
 console.log(JSON.stringify({ ok: true, skills: count }));
