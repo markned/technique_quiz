@@ -1,3 +1,4 @@
+import { ReplayWithPlayIcon } from "../components/ReplayWithPlayIcon";
 import { AdmissionPanel } from "./admission";
 import { forgetRoom } from "../navigation";
 import { RoomMenu } from "./RoomMenu";
@@ -39,8 +40,7 @@ function roomTimer(state: PublicRoomState) {
     state.phase === "freestyle_voting"
       ? (state.voteSeconds ?? 45)
       : (state.answerSeconds ??
-        getGuessSeconds(state.quiz?.answerLineCount ?? round?.revealLineIds.length ?? 1) +
-          (state.discord ? 15 : 0));
+        getGuessSeconds(state.quiz?.answerLineCount ?? round?.revealLineIds.length ?? 1));
   const seconds = state.replay
     ? Math.ceil(state.replay.remainingMs / 1000)
     : state.deadlineAt === null
@@ -104,11 +104,20 @@ function ReplayButton({
   return (
     <button
       type="button"
-      className="btn multiplayer-replay"
+      className="dock-btn dock-btn-replay multiplayer-replay"
+      aria-label={
+        state.replay ? (seconds ? `Повтор · ${seconds} с` : "Готовим повтор…") : "Повторить фрагмент"
+      }
+      title="Повторить фрагмент"
       disabled={!!state.replay || !!state.pausedAt}
       onClick={() => send({ type: "player_replay", turnId: state.turnId })}
     >
-      {state.replay ? (seconds ? `Повтор · ${seconds} с` : "Готовим повтор…") : "↻ Повторить фрагмент"}
+      <ReplayWithPlayIcon />
+      {state.replay ? (
+        <span className="multiplayer-replay-count" aria-hidden="true">
+          {seconds || "…"}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -415,16 +424,7 @@ function HostLobby({
           </button>
         </div>
         <PlayerRoster state={state} />
-        <details className="multiplayer-room-settings">
-          <summary>Настройки комнаты</summary>
-          <label className="multiplayer-discord-toggle">
-            <input
-              type="checkbox"
-              checked={state.discord}
-              onChange={(event) => send({ type: "host_set_discord", enabled: event.target.checked })}
-            />
-            Играем через Discord
-          </label>
+        <section className="multiplayer-room-settings" aria-label="Настройки комнаты">
           <button
             type="button"
             className="btn"
@@ -435,7 +435,7 @@ function HostLobby({
           >
             Скопировать ссылку восстановления экрана
           </button>
-        </details>
+        </section>
         {copyStatus ? (
           <p className="multiplayer-muted" role="status">
             {copyStatus}
@@ -1191,9 +1191,9 @@ function PlayerQuizController({
                   ? "Расставьте строки и подтвердите ответ"
                   : "Выберите вариант и подтвердите ответ"}
             </p>
-            <ReplayButton state={state} playerId={playerId} send={send} />
             <RoundProgress state={state} />
             <nav className="dock" aria-label="Ответ">
+              <ReplayButton state={state} playerId={playerId} send={send} />
               <button
                 className="dock-btn dock-btn-primary"
                 type="button"
@@ -1259,7 +1259,6 @@ function PlayerFreestyleSubmit({
     );
   return (
     <MultiplayerScene state={state}>
-      <ReplayButton state={state} playerId={playerId} send={send} />
       <div className="quiz-screen">
         <PlayerStageHeader state={state} playerId={playerId} />
         <section className="quiz-content multiplayer-controller-content">
@@ -1273,19 +1272,26 @@ function PlayerFreestyleSubmit({
             onChange={(event) => setText(event.target.value)}
             autoFocus
           />
-          <button
-            type="button"
-            className="btn btn-primary btn-hero"
-            disabled={!text.trim() || !!state.pausedAt}
-            onClick={() => {
-              const clean = text.trim();
-              if (!clean) return;
-              onAcceptedText(clean);
-              send({ type: "player_freestyle_submit", turnId: state.turnId, text: clean });
-            }}
-          >
-            Отправить
-          </button>
+          <div className="dock-host">
+            <nav className="dock" aria-label="Ответ">
+              <ReplayButton state={state} playerId={playerId} send={send} />
+              <button
+                type="button"
+                aria-label="Отправить"
+                title="Отправить"
+                className="dock-btn dock-btn-primary"
+                disabled={!text.trim() || !!state.pausedAt}
+                onClick={() => {
+                  const clean = text.trim();
+                  if (!clean) return;
+                  onAcceptedText(clean);
+                  send({ type: "player_freestyle_submit", turnId: state.turnId, text: clean });
+                }}
+              >
+                ✓
+              </button>
+            </nav>
+          </div>
         </section>
       </div>
     </MultiplayerScene>

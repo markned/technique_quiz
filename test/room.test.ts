@@ -283,17 +283,17 @@ describe("authoritative room recovery", () => {
     expect(f.game.state.phase).toBe("quiz_answering");
   });
 
-  it("adds Discord time and does not enable fast-test timings by room prefix in production", async () => {
+  it("ignores the retired Discord setting and rejects fast-test timings in production", async () => {
     const f = await fixture(false);
     await f.send(f.host, { type: "host_set_discord", enabled: true });
     await f.chooseMode();
     await f.send(f.host, { type: "host_start_game" });
-    expect(f.alarmAt - Date.now()).toBe(5000);
+    expect(f.alarmAt - Date.now()).toBe(2000);
     await f.due();
     await f.send(f.host, { type: "host_media_ready", turnId: f.game.state.turnId });
     expect(f.alarmAt - Date.now()).toBeGreaterThan(250);
     await f.due();
-    expect(f.game.state.deadlineAt! - Date.now()).toBe(45_000);
+    expect(f.game.state.deadlineAt! - Date.now()).toBe(30_000);
   });
 
   it("freezes approved round versions for the entire game", async () => {
@@ -729,4 +729,29 @@ it("keeps a completed roster frozen during pause and advances on explicit resume
   expect(f.game.state.phase).toBe("quiz_answering");
   await f.send(f.host, { type: "host_pause", paused: false });
   expect(f.game.state.phase).toBe("round_results");
+});
+
+it("preserves an accepted answer and identity through repeated paused replacements and persistence", async () => {
+  const f = await fixture();
+  await f.start();
+  let old = f.players[0]!;
+  const playerId = old.state?.role === "player" ? old.state.playerId : "";
+  await f.send(old, {
+    type: "player_quiz_answer",
+    turnId: f.game.state.turnId,
+    answer: { variant: "mc4", selectedIndex: 0 },
+  });
+  await f.send(f.host, { type: "host_pause", paused: true });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const replacement = f.connect(`replacement-${attempt}`);
+    await f.join(replacement, "client-0");
+    await f.close(old);
+    expect(replacement.state).toMatchObject({ role: "player", playerId });
+    expect(f.game.state.playersById[playerId]?.connected).toBe(true);
+    expect(f.game.state.quiz?.answers[playerId]).toEqual({ variant: "mc4", selectedIndex: 0 });
+    expect(Object.keys(f.game.state.playersById)).toHaveLength(3);
+    if (attempt === 2) await f.restart();
+    expect(f.game.state.manualPaused).toBe(true);
+    old = replacement;
+  }
 });

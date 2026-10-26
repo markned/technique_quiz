@@ -345,25 +345,23 @@
   }
 }
 
-/* The shared display reserves the left column for live standings. */
-.multiplayer-host-game {
-  --multiplayer-sidebar: clamp(190px, 22vw, 300px);
-}
+/* Standings never move the shared quiz away from the viewport center. */
 .multiplayer-host-game > .app-overlay {
-  margin-left: var(--multiplayer-sidebar);
-  width: calc(100% - var(--multiplayer-sidebar));
+  margin-inline: auto;
+  width: 100%;
 }
 .multiplayer-host-leaderboard {
   position: absolute;
   left: 16px;
-  top: 28px;
-  bottom: 110px;
-  width: calc(var(--multiplayer-sidebar) - 32px);
+  top: 70px;
+  width: clamp(140px, calc((100vw - 800px) / 2 - 32px), 220px);
+  max-height: calc(100% - 180px);
   z-index: 5;
-  overflow-y: auto;
+  overflow: auto;
   padding: 12px;
   background: rgba(8, 10, 16, 0.72);
-  border-radius: 8px;
+  border: 1px solid #ffffff18;
+  border-radius: 14px;
 }
 .multiplayer-host-leaderboard .multiplayer-leaderboard ol {
   grid-template-columns: 1fr;
@@ -503,4 +501,79 @@
 }
 .multiplayer-controller-content > * {
   flex-shrink: 0;
+}
+
+.rules-screen-card.multiplayer-panel {
+  flex: 0 1 auto;
+  height: auto;
+  min-height: 0;
+  max-height: calc(100dvh - 100px);
+  width: min(700px, 100%);
+  justify-content: flex-start;
+}
+.multiplayer-entry-actions {
+  flex: 0 0 auto;
+}
+.multiplayer-lobby {
+  gap: 20px;
+}
+.multiplayer-lobby .multiplayer-player-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+}
+.multiplayer-room-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #ffffff18;
+}
+.multiplayer-room-settings .btn {
+  font-size: 0.85rem;
+  padding: 12px 16px;
+}
+.multiplayer-replay {
+  position: relative;
+  flex-shrink: 0;
+}
+.multiplayer-replay-count {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  min-width: 24px;
+  padding: 3px;
+  border-radius: 20px;
+  background: #252f48;
+  font: 700 12px system-ui;
+}
+@media (max-width: 1199px) {
+  .multiplayer-host-leaderboard {
+    position: relative;
+    left: auto;
+    top: auto;
+    bottom: auto;
+    order: 2;
+    width: min(760px, calc(100% - 24px));
+    max-height: 140px;
+    margin: 0 auto 40px;
+    padding: 10px;
+    flex-shrink: 0;
+  }
+  .multiplayer-host-leaderboard .multiplayer-leaderboard ol {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+  }
+  .multiplayer-host-leaderboard .multiplayer-leaderboard li {
+    min-width: 130px;
+    flex: 1;
+  }
+  .multiplayer-host-game > .app-overlay {
+    min-height: 0;
+    padding-bottom: 30px;
+  }
+}
+
+.multiplayer-answer-grid .quiz-option {
+  min-height: 48px;
+  padding: 12px 16px;
 }

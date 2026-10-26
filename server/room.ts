@@ -185,6 +185,7 @@ export class QuizRoom {
     this.state.manualPaused ??= false;
     this.state.replay ??= null;
     this.state.minPlayers = MIN_PLAYERS;
+    this.state.discord = false;
     this.state.finalVote ??= this.state.phase === "finished" ? { votes: {}, decision: null } : null;
     this.state.backgroundStartedAt ??= this.state.playingStartedAt;
     this.state.initialVote ??= this.state.phase === "mode_select" ? { votes: {}, decision: null } : null;
@@ -464,7 +465,7 @@ export class QuizRoom {
     }
     if (message.type === "host_set_discord") {
       if (this.state.phase !== "lobby") return;
-      this.state.discord = message.enabled;
+      this.state.discord = false;
       this.touch();
       await this.persistAndBroadcast();
       return;
@@ -810,19 +811,14 @@ export class QuizRoom {
     }
     this.state.phase = "transition";
     this.state.backgroundStartedAt = nowMs();
-    this.state.answerSeconds = this.isTest()
-      ? 5
-      : guessSecondsFor(round.revealLineIds.length) + (this.state.discord ? 15 : 0);
-    this.state.voteSeconds = this.isTest()
-      ? 5
-      : MULTIPLAYER_FREESTYLE_VOTE_SECONDS + (this.state.discord ? 15 : 0);
+    this.state.answerSeconds = this.isTest() ? 5 : guessSecondsFor(round.revealLineIds.length);
+    this.state.voteSeconds = this.isTest() ? 5 : MULTIPLAYER_FREESTYLE_VOTE_SECONDS;
     this.state.turnId = id("turn");
     this.state.playingStartedAt = null;
     this.state.currentRoundId = round.id;
     this.state.upcomingRoundTitle = round.title;
     this.state.deadlineAt = null;
-    this.state.transitionUntil =
-      nowMs() + (this.isTest() ? 300 : MULTIPLAYER_TRANSITION_MS + (this.state.discord ? 3_000 : 0));
+    this.state.transitionUntil = nowMs() + (this.isTest() ? 300 : MULTIPLAYER_TRANSITION_MS);
     this.state.nextAdvanceAt = null;
     this.state.roundResult = null;
     this.state.freestyle = null;
@@ -868,10 +864,7 @@ export class QuizRoom {
   private async enterAnswerPhase() {
     const round = currentRound(this.state);
     if (!round) return;
-    const deadlineAt =
-      nowMs() +
-      (this.isTest() ? 5 : guessSecondsFor(round.revealLineIds.length) + (this.state.discord ? 15 : 0)) *
-        1_000;
+    const deadlineAt = nowMs() + (this.isTest() ? 5 : guessSecondsFor(round.revealLineIds.length)) * 1_000;
     this.state.deadlineAt = deadlineAt;
     this.state.nextAdvanceAt = null;
     if (this.state.mode === "quiz" && this.state.quiz) {
@@ -892,9 +885,7 @@ export class QuizRoom {
     this.state.replay = null;
     if (!this.state.freestyle) return;
     this.state.phase = "freestyle_voting";
-    this.state.deadlineAt =
-      nowMs() +
-      (this.isTest() ? 5 : MULTIPLAYER_FREESTYLE_VOTE_SECONDS + (this.state.discord ? 15 : 0)) * 1_000;
+    this.state.deadlineAt = nowMs() + (this.isTest() ? 5 : MULTIPLAYER_FREESTYLE_VOTE_SECONDS) * 1_000;
     this.syncFreestylePublicState();
     this.touch();
     if (this.state.freestyle.votingOptions.length <= 1 || this.allEligibleVotersDone()) {
@@ -934,8 +925,7 @@ export class QuizRoom {
     };
     this.state.phase = "round_results";
     this.state.deadlineAt = null;
-    this.state.nextAdvanceAt =
-      nowMs() + (this.isTest() ? 3_000 : MULTIPLAYER_ROUND_RESULTS_MS + (this.state.discord ? 3_000 : 0));
+    this.state.nextAdvanceAt = nowMs() + (this.isTest() ? 3_000 : MULTIPLAYER_ROUND_RESULTS_MS);
     this.touch();
     await this.persistAndBroadcast();
   }
@@ -996,8 +986,7 @@ export class QuizRoom {
     };
     this.state.phase = "round_results";
     this.state.deadlineAt = null;
-    this.state.nextAdvanceAt =
-      nowMs() + (this.isTest() ? 3_000 : MULTIPLAYER_ROUND_RESULTS_MS + (this.state.discord ? 3_000 : 0));
+    this.state.nextAdvanceAt = nowMs() + (this.isTest() ? 3_000 : MULTIPLAYER_ROUND_RESULTS_MS);
     this.touch();
     await this.persistAndBroadcast();
   }
