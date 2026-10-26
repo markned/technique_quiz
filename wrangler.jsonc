@@ -9,6 +9,7 @@
   ],
   "durable_objects": {
     "bindings": [
+      { "name": "Online", "class_name": "OnlineCoordinator" },
       {
         "name": "Main",
         "class_name": "TechniqueQuizRoom",
@@ -28,6 +29,7 @@
       "tag": "v2",
       "new_sqlite_classes": ["CommunityStore"],
     },
+    { "tag": "v3", "new_sqlite_classes": ["OnlineCoordinator"] },
   ],
   "vars": {
     "TEST_MODE": "false",
@@ -50,6 +52,7 @@
       ],
       "durable_objects": {
         "bindings": [
+          { "name": "Online", "class_name": "OnlineCoordinator" },
           { "name": "Main", "class_name": "TechniqueQuizRoom" },
           { "name": "Community", "class_name": "CommunityStore" },
         ],
@@ -67,6 +70,7 @@
       },
       "durable_objects": {
         "bindings": [
+          { "name": "Online", "class_name": "OnlineCoordinator" },
           {
             "name": "Main",
             "class_name": "TechniqueQuizRoom",

@@ -122,9 +122,25 @@ export type PrivatePlayerState = {
   quizAnswer: QuizAnswer | null;
   submission: string | null;
   votedSubmissionId: PlayerId | null;
+  submissionId?: string;
+  personalReplay?: { id: string; startedAt: number; endsAt: number } | null;
+};
+
+export type OnlineMatchState = {
+  readyPlayerIds: PlayerId[];
+  readyDeadlineAt: number | null;
+  modeVoteDeadlineAt: number | null;
+  mediaReadyPlayerIds: PlayerId[];
+  mediaLoadDeadlineAt: number | null;
+  eligiblePlayerIds: PlayerId[];
+  quorumDeadlineAt: number | null;
+  endedEarly: boolean;
+  rematchPlayerIds: PlayerId[];
+  rematchDeadlineAt: number | null;
 };
 
 export type PublicRoomState = {
+  online?: OnlineMatchState;
   code: RoomCode;
   phase: MultiplayerPhase;
   mode: MultiplayerMode | null;

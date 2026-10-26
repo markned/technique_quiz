@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "../community/api";
 import { simulationStorageKey } from "../dev/simulationContext";
 type Turnstile = {
@@ -31,12 +31,13 @@ export function loadScript() {
 }
 const storageKey = (code: string, role: string) =>
   simulationStorageKey(`technique_admission:${role}:${code}`);
-function saved(code: string, role: string, clientId: string) {
+function saved(code: string, role: string, clientId: string, scope?: "queue") {
   try {
-    const value = localStorage.getItem(storageKey(code, role));
+    const value = localStorage.getItem(storageKey(code, scope ?? role));
     if (!value) return "";
     const payload = JSON.parse(atob(value.split(".")[0]!.replace(/-/g, "+").replace(/_/g, "/")));
-    return payload.clientId === clientId &&
+    return payload.purpose === (scope ? "queue-admission-v1" : "room-admission-v1") &&
+      payload.clientId === clientId &&
       payload.room === code &&
       payload.role === role &&
       payload.expiresAt > Date.now() + 60_000
@@ -46,8 +47,14 @@ function saved(code: string, role: string, clientId: string) {
     return "";
   }
 }
-export function useAdmission(code: string, role: "host" | "player", clientId: string, enabled: boolean) {
-  const [ticket, setTicket] = useState(() => saved(code, role, clientId));
+export function useAdmission(
+  code: string,
+  role: "host" | "player",
+  clientId: string,
+  enabled: boolean,
+  scope?: "queue",
+) {
+  const [ticket, setTicket] = useState(() => saved(code, role, clientId, scope));
   const [sitekey, setSitekey] = useState("");
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -75,13 +82,13 @@ export function useAdmission(code: string, role: "host" | "player", clientId: st
       const r = await fetch(apiUrl("/api/admission"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, room: code, role, token }),
+        body: JSON.stringify({ clientId, room: code, role, token, scope }),
         signal: AbortSignal.timeout(12000),
       });
       const data = (await r.json()) as { ticket: string; error?: string };
       if (!r.ok) throw new Error(data.error ?? "Проверка не пройдена.");
       try {
-        localStorage.setItem(storageKey(code, role), data.ticket);
+        localStorage.setItem(storageKey(code, scope ?? role), data.ticket);
       } catch {
         /* private browsing */
       }
@@ -92,6 +99,15 @@ export function useAdmission(code: string, role: "host" | "player", clientId: st
       throw e;
     }
   };
+  const invalidate = useCallback(() => {
+    try {
+      localStorage.removeItem(storageKey(code, scope ?? role));
+    } catch {
+      /* unavailable storage */
+    }
+    setTicket("");
+    setSitekey("");
+  }, [code, scope, role]);
   return {
     ticket,
     sitekey,
@@ -102,14 +118,6 @@ export function useAdmission(code: string, role: "host" | "player", clientId: st
       setSitekey("");
       setAttempt((v) => v + 1);
     },
-    invalidate: () => {
-      try {
-        localStorage.removeItem(storageKey(code, role));
-      } catch {
-        /* private browsing storage unavailable */
-      }
-      setTicket("");
-      setSitekey("");
-    },
+    invalidate,
   };
 }

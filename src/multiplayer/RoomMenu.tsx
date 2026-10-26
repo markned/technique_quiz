@@ -8,10 +8,12 @@ export function RoomMenu({
   state,
   role,
   send,
+  onExit,
 }: {
   state: PublicRoomState | null;
   role: "host" | "player";
   send: (message: ClientMessage) => boolean;
+  onExit?: () => void;
 }) {
   const leaving = useRef(false);
   const dialog = useRef<HTMLDivElement>(null);
@@ -74,6 +76,10 @@ export function RoomMenu({
     )
       return;
     leaving.current = true;
+    if (onExit) {
+      onExit();
+      return;
+    }
     if (role === "player" && state) {
       send({ type: "player_leave" });
       return;
@@ -137,7 +143,13 @@ export function RoomMenu({
           </section>
         </div>
       ) : null}
-      <RulesOverlay open={rules} onClose={() => setRules(false)} gameMode={state?.mode ?? null} multiplayer />
+      <RulesOverlay
+        open={rules}
+        onClose={() => setRules(false)}
+        gameMode={state?.mode ?? null}
+        multiplayer
+        online={!!state?.online}
+      />
     </>
   );
 }

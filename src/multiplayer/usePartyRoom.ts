@@ -122,7 +122,7 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
           failures = 0;
           setStatus("connected");
           if (message.state.phase !== "expired" && !simulationClient())
-            rememberRoom({ code, role, expiresAt: message.state.expiresAt });
+            rememberRoom({ code, role, expiresAt: message.state.expiresAt, online: !!message.state.online });
           if (!clockInitialized && message.serverNow) {
             serverOffset.current = message.serverNow - Date.now();
             clockInitialized = true;
@@ -134,6 +134,16 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
           const shift = (value: number | null) => (value == null ? null : value - serverOffset.current);
           setState({
             ...message.state,
+            online: message.state.online
+              ? {
+                  ...message.state.online,
+                  readyDeadlineAt: shift(message.state.online.readyDeadlineAt),
+                  modeVoteDeadlineAt: shift(message.state.online.modeVoteDeadlineAt),
+                  mediaLoadDeadlineAt: shift(message.state.online.mediaLoadDeadlineAt),
+                  quorumDeadlineAt: shift(message.state.online.quorumDeadlineAt),
+                  rematchDeadlineAt: shift(message.state.online.rematchDeadlineAt),
+                }
+              : undefined,
             pausedAt: shift(message.state.pausedAt),
             replay: message.state.replay
               ? {
@@ -172,6 +182,18 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
           });
           setYou((previous) => ({
             ...message.you,
+            own: message.you.own
+              ? {
+                  ...message.you.own,
+                  personalReplay: message.you.own.personalReplay
+                    ? {
+                        ...message.you.own.personalReplay,
+                        startedAt: shift(message.you.own.personalReplay.startedAt)!,
+                        endsAt: shift(message.you.own.personalReplay.endsAt)!,
+                      }
+                    : null,
+                }
+              : undefined,
             reconnected: message.you.reconnected || !!previous?.reconnected,
           }));
           if (message.you.playerId) rememberPlayerId(code, message.you.playerId);

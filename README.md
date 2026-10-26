@@ -211,3 +211,7 @@ npx wrangler dev --env test --port 2001 --inspector-port 9231 --persist-to /tmp/
 ## Development verification
 
 See [QA workflow](docs/QA.md) for Quick, Multiplayer and Release checks and the five project skills in `.agents/skills/`.
+
+### Форматы мультиплеера
+
+«Общий экран» — существующая игра с ведущим экраном и подключением по коду. «Онлайн-матч» (`/online`) — автоматический подбор до 6 игроков без ведущего, старт по готовности, совместный выбор режима и 5 раундов. Музыка и личный повтор звучат на каждом устройстве; меню не останавливает матч. Подробности протокола, ограничений и запуска: [docs/ONLINE_MATCH.md](docs/ONLINE_MATCH.md).

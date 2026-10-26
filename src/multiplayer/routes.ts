@@ -4,6 +4,7 @@ import type { RoomCode } from "./types";
 
 export type AppRoute =
   | { kind: "home" }
+  | { kind: "online"; code?: RoomCode }
   | { kind: "host"; code: RoomCode }
   | { kind: "player"; code: RoomCode }
   | { kind: "editor" };
@@ -12,6 +13,8 @@ export function parseAppRoute(pathname = window.location.pathname): AppRoute {
   const path = pathname.replace(/\/+$/, "") || "/";
   if (path === "/editor") return { kind: "editor" };
   const parts = path.split("/").filter(Boolean);
+  if (parts[0] === "online" && parts.length <= 2)
+    return { kind: "online", code: parts[1] ? normalizeRoomCode(parts[1]) : undefined };
   if (parts[0] === "room" && parts[1]) {
     const code = normalizeRoomCode(parts[1]);
     if (parts[2] === "host") return { kind: "host", code };
