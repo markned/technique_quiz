@@ -8,10 +8,7 @@ registerGlobalAudioUnlock();
 
 async function bootstrap() {
   const root = document.getElementById("root")!;
-  if (
-    (import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1") &&
-    window.location.pathname === "/simulate"
-  ) {
+  if (window.location.pathname === "/simulate") {
     const { MultiplayerSimulation } = await import("./dev/MultiplayerSimulation");
     ReactDOM.createRoot(root).render(<MultiplayerSimulation />);
   } else if (/\/community\/?$/.test(window.location.pathname)) {

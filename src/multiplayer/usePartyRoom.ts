@@ -3,6 +3,7 @@ import { rememberRoom } from "../navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PartySocket from "partysocket";
 import { useSimulation } from "../dev/useSimulation";
+import { simulationClient } from "../dev/simulationContext";
 import type { ClientMessage } from "./messages";
 import type { PublicRoomState, RoomCode, ServerMessage } from "./types";
 import {
@@ -120,13 +121,7 @@ export function usePartyRoom({ code, role, playerName, enabled = true }: UsePart
           authenticated.current = message.you.role !== "spectator";
           failures = 0;
           setStatus("connected");
-          if (
-            message.state.phase !== "expired" &&
-            !(
-              (import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1") &&
-              new URLSearchParams(window.location.search).has("simClient")
-            )
-          )
+          if (message.state.phase !== "expired" && !simulationClient())
             rememberRoom({ code, role, expiresAt: message.state.expiresAt });
           if (!clockInitialized && message.serverNow) {
             serverOffset.current = message.serverNow - Date.now();
