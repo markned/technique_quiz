@@ -166,6 +166,7 @@ test("multiplayer freestyle supports anonymous voting, original reveal, similari
   const code = e2eRoomCode("S");
   const { host, alice, bob, cara } = await setupRoom(browser, code);
 
+  await alice.setViewportSize({ width: 390, height: 844 });
   await chooseInitialMode(host, alice, bob, "freestyle");
   await host.getByRole("button", { name: "Начать игру" }).click();
 
@@ -179,6 +180,9 @@ test("multiplayer freestyle supports anonymous voting, original reveal, similari
 
   await expect(alice.getByText("Голосование")).toBeVisible({ timeout: 15_000 });
   await expect(alice.getByRole("button", { name: /Откуда в жопе бриллианты/ })).toHaveCount(0);
+  expect(await alice.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  const voteButton = await alice.getByRole("button", { name: /совсем другой ответ/ }).boundingBox();
+  expect(voteButton!.height).toBeGreaterThanOrEqual(44);
   await alice.getByRole("button", { name: /совсем другой ответ/ }).click();
   await bob.getByRole("button", { name: /Откуда в жопе бриллианты/ }).click();
   await cara.getByRole("button", { name: /Откуда в жопе бриллианты/ }).click();
@@ -345,4 +349,54 @@ test("cancelling browser back keeps the active singleplayer session", async ({ p
   await page.goBack();
   await expect(page).toHaveURL(/#singleplayer\/play$/);
   await expect(page.getByRole("heading", { name: "Управление", exact: true })).toHaveCount(0);
+});
+
+test("responsive lobby stays compact and settings are visible without disclosures", async ({ browser }) => {
+  const host = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await host.goto(`/room/${e2eRoomCode("L")}/host`);
+  const card = host.locator(".multiplayer-lobby");
+  await expect(card).toBeVisible();
+  await expect(host.locator("details")).toHaveCount(0);
+  await expect(host.getByText("Играем через Discord")).toHaveCount(0);
+  await expect(host.getByRole("button", { name: "Скопировать ссылку восстановления экрана" })).toBeVisible();
+  const box = await card.boundingBox();
+  expect(box!.height).toBeLessThan(720);
+  expect(box!.width).toBeLessThanOrEqual(390);
+  expect(await host.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await host.close();
+});
+
+test("centered desktop host and touch replay preserve the singleplayer controls", async ({ browser }) => {
+  const { host, alice, bob } = await setupRoom(browser, e2eRoomCode("C"));
+  await host.setViewportSize({ width: 1440, height: 900 });
+  await alice.setViewportSize({ width: 390, height: 844 });
+  await chooseInitialMode(host, alice, bob, "quiz");
+  await host.getByRole("button", { name: "Начать игру", exact: true }).click();
+  const replay = alice.getByRole("button", { name: "Повторить фрагмент", exact: true });
+  await expect(replay).toBeVisible();
+  const control = await replay.boundingBox();
+  expect(control!.width).toBeGreaterThanOrEqual(44);
+  expect(control!.height).toBeGreaterThanOrEqual(44);
+  await expect(replay).toHaveClass(/dock-btn-replay/);
+  const content = await host.locator(".quiz-content-fit-inner").boundingBox();
+  expect(Math.abs(content!.x + content!.width / 2 - 720)).toBeLessThan(2);
+  await host.setViewportSize({ width: 1200, height: 900 });
+  const header = await host.locator(".quiz-header").boundingBox();
+  const standings = await host.locator(".multiplayer-host-leaderboard").boundingBox();
+  expect(header!.x).toBeGreaterThan(standings!.x + standings!.width);
+  const compactContent = await host.locator(".quiz-content-fit-inner").boundingBox();
+  expect(Math.abs(compactContent!.x + compactContent!.width / 2 - 600)).toBeLessThan(2);
+  await replay.click();
+  await expect(alice.getByRole("button", { name: /Готовим повтор|Повтор ·/ })).toBeDisabled();
+  expect(await alice.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test("responsive simulation initializes all independent clients", async ({ page }) => {
+  // Lobby initialization uses the regular backend; fast simulation needs a separate port 2001.
+  await page.goto("/simulate");
+  await expect(page.locator("iframe")).toHaveCount(4);
+  for (const title of ["Игрок 1 · Аня", "Игрок 2 · Борис", "Игрок 3 · Вика"])
+    await expect(
+      page.frameLocator(`iframe[title="${title}"]`).getByRole("heading", { name: "Ждём ведущий экран" }),
+    ).toBeVisible({ timeout: 15000 });
 });

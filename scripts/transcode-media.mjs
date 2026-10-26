@@ -8,7 +8,7 @@
  * Запуск: `node scripts/transcode-media.mjs`
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, renameSync, unlinkSync } from "node:fs";
+import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 

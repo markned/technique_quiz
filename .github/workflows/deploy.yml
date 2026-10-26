@@ -26,6 +26,8 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
+      - run: npm run skills:check
+      - run: npm run typecheck:qa
       - run: npm test
       - run: npm run server:check
       - run: npx playwright install --with-deps chromium

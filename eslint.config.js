@@ -23,7 +23,43 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["dist/**", "vite/**", "scripts/**", "src/editor/**"],
+    ignores: ["dist/**", "dist-test/**", "node_modules/**", "worker-bindings.d.ts"],
+  },
+  {
+    files: ["scripts/**/*.mjs", "*.js"],
+    languageOptions: {
+      globals: Object.fromEntries(
+        [
+          "process",
+          "console",
+          "Buffer",
+          "setTimeout",
+          "clearTimeout",
+          "setInterval",
+          "clearInterval",
+          "WebSocket",
+          "fetch",
+          "URL",
+          "URLSearchParams",
+          "AbortSignal",
+          "TextDecoder",
+          "TextEncoder",
+        ].map((n) => [n, "readonly"]),
+      ),
+    },
+  },
+  {
+    files: ["server/**/*.ts", "party/**/*.ts", "test/**/*.ts", "e2e/**/*.ts", "vite/**/*.ts", "*.ts"],
+    rules: { "@typescript-eslint/no-explicit-any": "warn", "@typescript-eslint/no-unused-vars": "off" },
+  },
+  {
+    files: ["party/server.ts"],
+    rules: {
+      "@typescript-eslint/triple-slash-reference": [
+        "error",
+        { path: "always", types: "prefer-import", lib: "always" },
+      ],
+    },
   },
   prettierConfig,
 );
