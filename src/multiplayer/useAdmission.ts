@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "../community/api";
+import { simulationStorageKey } from "../dev/simulationContext";
 type Turnstile = {
   render(el: HTMLElement, options: Record<string, unknown>): string;
   remove(id: string): void;
@@ -28,7 +29,8 @@ export function loadScript() {
     document.head.appendChild(script);
   }));
 }
-const storageKey = (code: string, role: string) => `technique_admission:${role}:${code}`;
+const storageKey = (code: string, role: string) =>
+  simulationStorageKey(`technique_admission:${role}:${code}`);
 function saved(code: string, role: string, clientId: string) {
   try {
     const value = localStorage.getItem(storageKey(code, role));

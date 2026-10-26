@@ -1,4 +1,5 @@
 import { ROOM_CODE_LENGTH, type HostToken, type PlayerId, type RoomCode } from "./types";
+import { simulationClient, simulationStorageKey } from "../dev/simulationContext";
 
 const CLIENT_ID_KEY = "technique_quiz_multiplayer_client_id";
 const PLAYER_NAME_KEY = "technique_quiz_multiplayer_player_name";
@@ -19,14 +20,11 @@ function safeLocalStorage(): Pick<Storage, "getItem" | "setItem"> {
     const probe = "technique_quiz_storage_probe";
     storage.setItem(probe, "1");
     storage.removeItem(probe);
-    const simulation =
-      import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1"
-        ? new URLSearchParams(window.location.search).get("simClient")
-        : null;
+    const simulation = simulationClient();
     if (simulation)
       return {
-        getItem: (key) => storage.getItem(`simulation:${simulation}:${key}`),
-        setItem: (key, value) => storage.setItem(`simulation:${simulation}:${key}`, value),
+        getItem: (key) => storage.getItem(simulationStorageKey(key)),
+        setItem: (key, value) => storage.setItem(simulationStorageKey(key), value),
       };
     return storage;
   } catch {
@@ -82,7 +80,7 @@ export function getKnownPlayerId(roomCode: RoomCode): PlayerId | undefined {
 }
 
 export function getSavedPlayerName(): string {
-  if (import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1") {
+  if (simulationClient()) {
     const params = new URLSearchParams(window.location.search);
     if (params.get("simClient") && params.get("simName")) return params.get("simName")!.slice(0, 24);
   }

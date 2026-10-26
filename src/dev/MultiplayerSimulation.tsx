@@ -63,7 +63,9 @@ function SessionWindow({
 }
 
 export function MultiplayerSimulation() {
-  const fast = new URLSearchParams(window.location.search).get("fast") === "1";
+  const fast =
+    (import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1") &&
+    new URLSearchParams(window.location.search).get("fast") === "1";
   const createCode = () => (fast ? `E2EF${generateRoomCode().slice(0, 2)}` : generateRoomCode());
   const [code, setCode] = useState(createCode);
   const [playerCount, setPlayerCount] = useState(3);
@@ -148,7 +150,7 @@ export function MultiplayerSimulation() {
         {automatic
           ? "Игроки отвечают автоматически. Можно нажимать кнопки в любом окне."
           : "Все окна интерактивны. Запустите симуляцию или управляйте игрой вручную."}{" "}
-        Это настоящая локальная игра с отдельными подключениями.
+        Настоящие подключения к игровому серверу. На сайте каждый экран проходит проверку входа.
       </footer>
     </main>
   );

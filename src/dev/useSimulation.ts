@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import type { PublicRoomState } from "../multiplayer/types";
 import type { ClientMessage } from "../multiplayer/messages";
+import { simulationClient } from "./simulationContext";
 
-/** Local preview only: uses the actual server protocol and never supplies correct answers. */
+/** Uses the actual server protocol and never supplies correct answers or bypasses admission. */
 export function useSimulation(
   state: PublicRoomState | null,
   playerId: string | undefined,
@@ -11,8 +12,7 @@ export function useSimulation(
 ) {
   const [automatic, setAutomatic] = useState(false);
   const params = new URLSearchParams(window.location.search);
-  const active =
-    (import.meta.env.DEV || import.meta.env.VITE_PRIVATE_TESTING === "1") && !!params.get("simClient");
+  const active = !!simulationClient();
   const index = Number(params.get("simIndex") ?? 0);
   useEffect(() => {
     if (!active) return;
