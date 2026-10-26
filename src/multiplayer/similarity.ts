@@ -34,6 +34,8 @@ const CYR_TO_LATIN: Record<string, string> = {
   я: "ya",
 };
 
+export const FREESTYLE_SIMILARITY_THRESHOLD = 0.4;
+
 export type SimilarityBreakdown = {
   normalizedA: string;
   normalizedB: string;
@@ -149,6 +151,10 @@ export function compareAnswerSimilarity(a: string, b: string): SimilarityBreakdo
   };
 }
 
-export function isSimilarityBonus(submission: string, original: string, threshold = 0.5): boolean {
+export function isSimilarityBonus(
+  submission: string,
+  original: string,
+  threshold = FREESTYLE_SIMILARITY_THRESHOLD,
+): boolean {
   return compareAnswerSimilarity(submission, original).score >= threshold;
 }

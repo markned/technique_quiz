@@ -38,10 +38,8 @@ import {
 } from "../src/multiplayer/types";
 import { buildLeaderboard, canVoteForSubmission, scoreQuizAnswer } from "../src/multiplayer/scoring";
 import { buildMultiplayerRoundOrder, buildQuizRoundPayload, roundById } from "../src/multiplayer/rounds";
-import { compareAnswerSimilarity } from "../src/multiplayer/similarity";
+import { compareAnswerSimilarity, FREESTYLE_SIMILARITY_THRESHOLD } from "../src/multiplayer/similarity";
 import { revealAnswerText } from "../src/helpers/quizOptions";
-
-const SIMILARITY_THRESHOLD = 0.5;
 
 type StoredQuizState = PublicQuizState & {
   answers: Record<PlayerId, QuizAnswer>;
@@ -948,8 +946,14 @@ export class QuizRoom {
       return aa.submittedAt - bb.submittedAt || a.localeCompare(b);
     });
     const maxVotes = submittedIds.reduce((max, playerId) => Math.max(max, voteCounts.get(playerId) ?? 0), 0);
-    const tiedWinners = submittedIds.filter((playerId) => (voteCounts.get(playerId) ?? 0) === maxVotes);
-    const tieBrokenWinner = tiedWinners[0] ?? null;
+    const tiedWinners =
+      maxVotes > 0 ? submittedIds.filter((playerId) => (voteCounts.get(playerId) ?? 0) === maxVotes) : [];
+    const tieBrokenWinner =
+      tiedWinners.length > 1
+        ? tiedWinners[
+            Math.floor((crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32) * tiedWinners.length)
+          ]!
+        : (tiedWinners[0] ?? null);
 
     if (tieBrokenWinner && submittedIds.length > 0) {
       this.state.playersById[tieBrokenWinner]!.score += 1;
@@ -958,7 +962,7 @@ export class QuizRoom {
     const submissions: FreestyleRoundResult["submissions"] = submittedIds.map((playerId) => {
       const submission = freestyle.submissions[playerId]!;
       const similarity = compareAnswerSimilarity(submission.text, originalAnswer).score;
-      const similarityBonus = similarity >= SIMILARITY_THRESHOLD;
+      const similarityBonus = similarity >= FREESTYLE_SIMILARITY_THRESHOLD;
       if (similarityBonus) this.state.playersById[playerId]!.score += 1;
       return {
         playerId,
@@ -967,19 +971,22 @@ export class QuizRoom {
         votes: voteCounts.get(playerId) ?? 0,
         similarity,
         similarityBonus,
-        votingWinner: tiedWinners.includes(playerId),
+        votingWinner: playerId === tieBrokenWinner,
         tieBrokenWinner: playerId === tieBrokenWinner,
       };
     });
 
     const tieBreakNote =
       tiedWinners.length > 1
-        ? `Ничья по голосам: победил самый ранний ответ (${this.state.playersById[tieBrokenWinner!]?.name ?? "игрок"}).`
-        : null;
+        ? `Ничья по голосам: жеребьёвка выбрала победителя (${this.state.playersById[tieBrokenWinner!]?.name ?? "игрок"}).`
+        : maxVotes === 0
+          ? "Нет голосов — бонус за голосование не начислен."
+          : null;
 
     this.state.roundResult = {
       kind: "freestyle",
       originalAnswer,
+      similarityThreshold: FREESTYLE_SIMILARITY_THRESHOLD,
       submissions,
       winnerPlayerIds: tieBrokenWinner ? [tieBrokenWinner] : [],
       tieBreakNote,

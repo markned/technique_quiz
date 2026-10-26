@@ -582,3 +582,102 @@
   max-width: 700px;
   align-self: center;
 }
+
+/* Presentation only: game actions and server deadlines never wait for animation. */
+@keyframes multiplayer-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes multiplayer-score-pop {
+  from {
+    opacity: 0.5;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes multiplayer-winner-glow {
+  from {
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 24px rgba(91, 140, 255, 0.4);
+  }
+  to {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+}
+.multiplayer-stage-enter,
+.multiplayer-result-enter,
+.multiplayer-player-scene .quiz-options-panel,
+.multiplayer-host-game .quiz-options-panel {
+  animation: multiplayer-enter 0.28s ease-out both;
+}
+.multiplayer-result-enter:nth-child(2) {
+  animation-delay: 0.05s;
+}
+.multiplayer-result-enter:nth-child(3) {
+  animation-delay: 0.1s;
+}
+.multiplayer-submission-card.is-winner {
+  animation:
+    multiplayer-enter 0.28s ease-out both,
+    multiplayer-winner-glow 0.65s ease-out;
+}
+.multiplayer-score-pop,
+.multiplayer-answer-accepted {
+  display: inline-block;
+  animation: multiplayer-score-pop 0.3s ease-out;
+}
+.multiplayer-score-breakdown {
+  width: 100%;
+  min-width: 0;
+  font-size: 1.25rem;
+}
+.multiplayer-similarity {
+  margin: 0 0 8px;
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+.multiplayer-score-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.multiplayer-score-badge {
+  display: inline-block;
+  padding: 5px 8px;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  font-size: 0.85em;
+  opacity: 0.65;
+  animation: multiplayer-score-pop 0.3s ease-out 0.12s both;
+}
+.multiplayer-score-badge + .multiplayer-score-badge {
+  animation-delay: 0.3s;
+}
+.multiplayer-score-badge.is-earned {
+  color: var(--accent);
+  opacity: 1;
+}
+.multiplayer-player-scene .quiz-options-panel.genius-style .lyric-line.genius-bar.quiz-option,
+.multiplayer-host-game .quiz-options-panel.genius-style .lyric-line.genius-bar.quiz-option {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .multiplayer-player-scene *,
+  .multiplayer-host-game *,
+  .multiplayer-leaderboard *,
+  .multiplayer-stage-enter,
+  .multiplayer-result-enter {
+    animation: none !important;
+    transition: none !important;
+  }
+}

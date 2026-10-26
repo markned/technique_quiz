@@ -2,6 +2,7 @@ import { useCoarsePointer } from "../hooks/useCoarsePointer";
 import { useGesturePauseLayout } from "../hooks/useGesturePauseLayout";
 import { getControlsHintLines } from "../helpers/controlsCopy";
 import type { GameMode } from "../types";
+import { FREESTYLE_SIMILARITY_THRESHOLD } from "../multiplayer/similarity";
 
 type RulesScreenProps = {
   onComplete: () => void;
@@ -27,7 +28,7 @@ export function RulesScreen({ onComplete, onBack, gameMode, multiplayer = false 
           text:
             gameMode === "quiz"
               ? "Выбирайте один из четырёх вариантов ответа на своих устройствах. На общем экране ответы не нажимаются."
-              : "Напишите продолжение на своём устройстве, затем проголосуйте за чужой ответ.",
+              : `Напишите продолжение и проголосуйте за чужой ответ. Победа в голосовании — +1; схожесть с оригиналом от ${FREESTYLE_SIMILARITY_THRESHOLD * 100}% — ещё +1. Пунктуация не влияет. При ничьей — жеребьёвка, без голосов — без бонуса за голосование.`,
         },
         {
           kbd: "3",

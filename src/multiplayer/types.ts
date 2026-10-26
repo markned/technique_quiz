@@ -96,6 +96,8 @@ export type QuizRoundResult = {
 export type FreestyleRoundResult = {
   kind: "freestyle";
   originalAnswer: string;
+  /** Absent on results persisted before configurable bonus disclosure. */
+  similarityThreshold?: number;
   submissions: Array<{
     playerId: PlayerId;
     name: string;

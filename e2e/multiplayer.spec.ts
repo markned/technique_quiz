@@ -167,6 +167,7 @@ test("multiplayer freestyle supports anonymous voting, original reveal, similari
   const { host, alice, bob, cara } = await setupRoom(browser, code);
 
   await alice.setViewportSize({ width: 390, height: 844 });
+  await alice.emulateMedia({ reducedMotion: "reduce" });
   await chooseInitialMode(host, alice, bob, "freestyle");
   await host.getByRole("button", { name: "Начать игру" }).click();
 
@@ -179,6 +180,8 @@ test("multiplayer freestyle supports anonymous voting, original reveal, similari
   await cara.getByRole("button", { name: "Отправить" }).click();
 
   await expect(alice.getByText("Голосование")).toBeVisible({ timeout: 15_000 });
+  await expect(alice.getByLabel("Начисление очков")).toHaveCount(0);
+  await expect(host.getByLabel("Начисление очков")).toHaveCount(0);
   await expect(alice.getByRole("button", { name: /Откуда в жопе бриллианты/ })).toHaveCount(0);
   expect(await alice.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   const voteButton = await alice.getByRole("button", { name: /совсем другой ответ/ }).boundingBox();
@@ -187,10 +190,15 @@ test("multiplayer freestyle supports anonymous voting, original reveal, similari
   await bob.getByRole("button", { name: /Откуда в жопе бриллианты/ }).click();
   await cara.getByRole("button", { name: /Откуда в жопе бриллианты/ }).click();
 
-  await expect(host.getByText("Оригинал")).toBeVisible({ timeout: 15_000 });
+  await expect(host.getByText("Оригинальный бар", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(host.getByText(/Откуда в жопе бриллианты/).first()).toBeVisible();
-  await expect(host.getByText(/\+1 похожесть/)).toBeVisible();
+  await expect(host.getByText("+1 за оригинал", { exact: true })).toBeVisible();
   await expect(host.getByText(/победитель/)).toBeVisible();
+  await expect(alice.getByText("+1 за голосование", { exact: true })).toBeVisible();
+  await expect(alice.getByText("+1 за оригинал", { exact: true })).toBeVisible();
+  await expect(alice.getByText("Схожесть 100% · от 40% — +1", { exact: true })).toBeVisible();
+  await expect(alice.locator(".multiplayer-score-badge").first()).toHaveCSS("animation-name", "none");
+  expect(await alice.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
 test("a lost main screen pauses the game and a recovery link resumes it on another device", async ({

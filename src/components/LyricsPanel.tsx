@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { LyricLine } from "../types";
 
 type LyricsPanelProps = {
@@ -8,6 +8,7 @@ type LyricsPanelProps = {
 };
 
 export const LyricsPanel = memo(function LyricsPanel({ hintLines, visibleCount }: LyricsPanelProps) {
+  const reduced = useReducedMotion();
   const visibleLines = hintLines.slice(0, visibleCount);
 
   return (
@@ -17,9 +18,9 @@ export const LyricsPanel = memo(function LyricsPanel({ hintLines, visibleCount }
           <motion.p
             key={line.id}
             className="lyric-line genius-bar"
-            initial={{ opacity: 0, x: -20 }}
+            initial={reduced ? false : { opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: reduced ? 0 : 0.25 }}
           >
             {line.text || "•••"}
           </motion.p>

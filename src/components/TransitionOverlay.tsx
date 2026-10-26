@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 
 type TransitionOverlayProps = {
@@ -9,10 +9,11 @@ type TransitionOverlayProps = {
 const TYPEWRITER_MS_PER_CHAR = 60;
 
 export function TransitionOverlay({ visible, nextRoundTitle }: TransitionOverlayProps) {
+  const reduced = useReducedMotion();
   const [displayedLength, setDisplayedLength] = useState(0);
 
   useEffect(() => {
-    if (!visible || !nextRoundTitle) {
+    if (reduced || !visible || !nextRoundTitle) {
       setDisplayedLength(0);
       return;
     }
@@ -26,23 +27,23 @@ export function TransitionOverlay({ visible, nextRoundTitle }: TransitionOverlay
       }
     }, TYPEWRITER_MS_PER_CHAR);
     return () => clearInterval(id);
-  }, [visible, nextRoundTitle]);
+  }, [visible, nextRoundTitle, reduced]);
 
   return (
     <AnimatePresence>
       {visible ? (
         <motion.div
           className="transition-overlay"
-          initial={{ opacity: 0 }}
+          initial={reduced ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.35 }}
+          transition={{ duration: reduced ? 0 : 0.35 }}
         >
           {nextRoundTitle ? (
             <div className="transition-overlay-bar genius-style">
               <span className="transition-overlay-text">
-                {nextRoundTitle.slice(0, displayedLength)}
-                {displayedLength < nextRoundTitle.length && (
+                {reduced ? nextRoundTitle : nextRoundTitle.slice(0, displayedLength)}
+                {!reduced && displayedLength < nextRoundTitle.length && (
                   <span className="transition-overlay-caret" aria-hidden />
                 )}
               </span>
